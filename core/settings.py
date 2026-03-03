@@ -47,12 +47,12 @@ INSTALLED_APPS = [
     
     # Local apps
     'user',
-    'api'
+    'api',
     # 'vehicles',
     # 'diagnostics',
     # 'supports',
     # 'maintenance',
-    # 'notifications',
+    'notifications'
     # 'subscriptions'
 ]
 

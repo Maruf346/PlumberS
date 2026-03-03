@@ -6,7 +6,7 @@ import uuid
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-from subscriptions.models import SUBSCRIPTION_STATUS
+# from subscriptions.models import SUBSCRIPTION_STATUS
 
 
 
@@ -95,23 +95,23 @@ class User(AbstractUser):
         verbose_name_plural = 'Users'
         ordering = ['-created_at']
         
-    def update_premium_status(self):
-        from subscriptions.models import UserSubscription, SUBSCRIPTION_STATUS
+    # def update_premium_status(self):
+    #     from subscriptions.models import UserSubscription, SUBSCRIPTION_STATUS
         
-        active_subscription = UserSubscription.objects.filter(
-            user=self.user,
-            status=SUBSCRIPTION_STATUS.ACTIVE,
-            end_date__gt=timezone.now()
-        ).first()
+    #     active_subscription = UserSubscription.objects.filter(
+    #         user=self.user,
+    #         status=SUBSCRIPTION_STATUS.ACTIVE,
+    #         end_date__gt=timezone.now()
+    #     ).first()
         
-        if active_subscription:
-            self.is_premium = True
-            self.premium_expires_at = active_subscription.end_date
-        else:
-            self.is_premium = False
-            self.premium_expires_at = None
+    #     if active_subscription:
+    #         self.is_premium = True
+    #         self.premium_expires_at = active_subscription.end_date
+    #     else:
+    #         self.is_premium = False
+    #         self.premium_expires_at = None
             
-        self.save(update_fields=['is_premium', 'premium_expires_at'])
+    #     self.save(update_fields=['is_premium', 'premium_expires_at'])
         
         
 
