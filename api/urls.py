@@ -13,7 +13,7 @@ from django.conf import settings
 urlpatterns = [
     path('user/', include('user.urls')),
     # path('maintenance/', include('maintenance.urls')),
-    # path('supports/', include('supports.urls')),
+    path('supports/', include('supports.urls')),
     # path('notification/', include('notifications.urls')),
     # path('vehicles/', include('vehicles.urls')),
     # path('diagnostics/', include('diagnostics.urls')),

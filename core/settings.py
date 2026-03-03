@@ -50,7 +50,7 @@ INSTALLED_APPS = [
     'api',
     # 'vehicles',
     # 'diagnostics',
-    # 'supports',
+    'supports',
     # 'maintenance',
     'notifications'
     # 'subscriptions'
@@ -231,8 +231,8 @@ REST_FRAMEWORK = {
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Autointel Diagnostics API',
-    'DESCRIPTION': "API for Autointel Diagnostics - Vehicle Maintenance and Diagnostic Management System",
+    'TITLE': 'Adelaide Plumbing and Gasfitting API',
+    'DESCRIPTION': "API for Adelaide Plumbing and Gasfitting",
     'VERSION': '1.0.1',
     'TERMS_OF_SERVICE': 'https://www.google.com/policies/terms/',
     'CONTACT': {'email': 'maruf.bshs@gmail.com'},
