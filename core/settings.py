@@ -48,12 +48,10 @@ INSTALLED_APPS = [
     # Local apps
     'user',
     'api',
-    # 'vehicles',
-    # 'diagnostics',
+    'certificates',
     'supports',
-    # 'maintenance',
     'notifications'
-    # 'subscriptions'
+
 ]
 
 MIDDLEWARE = [
