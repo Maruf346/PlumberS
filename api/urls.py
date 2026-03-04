@@ -15,6 +15,7 @@ urlpatterns = [
     path('supports/', include('supports.urls')),
     path('certificates/', include('certificates.urls')),
     path('clients/', include('clients.urls')),
+    path('safety-forms/', include('safety_forms.urls')),
     # path('notification/', include('notifications.urls')),
 
     
