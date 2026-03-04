@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     'supports',
     'notifications',
     'clients',
-
+    'safety_forms',
 ]
 
 MIDDLEWARE = [
