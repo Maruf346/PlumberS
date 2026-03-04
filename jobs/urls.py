@@ -1,0 +1,71 @@
+from django.urls import path
+from .views import (
+    # Dashboard
+    JobDashboardView,
+    # Admin job CRUD
+    AdminJobListView,
+    AdminJobDetailView,
+    AdminJobCreateView,
+    AdminJobUpdateView,
+    JobScheduleView,
+    # Employee job views
+    EmployeeJobListView,
+    EmployeeJobDetailView,
+    JobStatusUpdateView,
+    # Attachments & photos
+    JobAttachmentUploadView,
+    JobAttachmentDeleteView,
+    JobPhotoUploadView,
+    JobPhotoDeleteView,
+    # Line items
+    JobLineItemView,
+    JobLineItemDetailView,
+    # Tasks
+    JobTaskView,
+    JobTaskCompleteView,
+    # Notes
+    JobNoteListView,
+    JobNoteCreateView,
+    # Activity
+    JobActivityListView,
+)
+
+urlpatterns = [
+    # Dashboard
+    path('dashboard/', JobDashboardView.as_view(), name='job-dashboard'),
+
+    # Admin CRUD
+    path('', AdminJobListView.as_view(), name='admin-job-list'),
+    path('create/', AdminJobCreateView.as_view(), name='job-create'),
+    path('<uuid:id>/', AdminJobDetailView.as_view(), name='admin-job-detail'),
+    path('<uuid:id>/update/', AdminJobUpdateView.as_view(), name='job-update-delete'),
+    path('<uuid:id>/schedule/', JobScheduleView.as_view(), name='job-schedule'),
+
+    # Employee views
+    path('my/', EmployeeJobListView.as_view(), name='employee-job-list'),
+    path('my/<uuid:id>/', EmployeeJobDetailView.as_view(), name='employee-job-detail'),
+    path('<uuid:id>/status/', JobStatusUpdateView.as_view(), name='job-status-update'),
+
+    # Attachments
+    path('<uuid:id>/attachments/', JobAttachmentUploadView.as_view(), name='job-attachment-upload'),
+    path('<uuid:id>/attachments/<uuid:attachment_id>/', JobAttachmentDeleteView.as_view(), name='job-attachment-delete'),
+
+    # Photos
+    path('<uuid:id>/photos/', JobPhotoUploadView.as_view(), name='job-photo-upload'),
+    path('<uuid:id>/photos/<uuid:photo_id>/', JobPhotoDeleteView.as_view(), name='job-photo-delete'),
+
+    # Line items
+    path('<uuid:id>/line-items/', JobLineItemView.as_view(), name='job-line-item'),
+    path('<uuid:id>/line-items/<uuid:item_id>/', JobLineItemDetailView.as_view(), name='job-line-item-detail'),
+
+    # Tasks
+    path('<uuid:id>/tasks/', JobTaskView.as_view(), name='job-task'),
+    path('<uuid:id>/tasks/<uuid:task_id>/complete/', JobTaskCompleteView.as_view(), name='job-task-complete'),
+
+    # Notes / chat
+    path('<uuid:id>/notes/', JobNoteListView.as_view(), name='job-note-list'),
+    path('<uuid:id>/notes/send/', JobNoteCreateView.as_view(), name='job-note-create'),
+
+    # Activity timeline
+    path('<uuid:id>/activity/', JobActivityListView.as_view(), name='job-activity'),
+]
