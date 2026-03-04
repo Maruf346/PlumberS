@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'notifications',
     'clients',
     'safety_forms',
+    'fleets',
 ]
 
 MIDDLEWARE = [
