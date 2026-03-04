@@ -14,6 +14,7 @@ urlpatterns = [
     path('user/', include('user.urls')),
     path('supports/', include('supports.urls')),
     path('certificates/', include('certificates.urls')),
+    path('clients/', include('clients.urls')),
     # path('notification/', include('notifications.urls')),
 
     
