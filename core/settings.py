@@ -50,7 +50,8 @@ INSTALLED_APPS = [
     'api',
     'certificates',
     'supports',
-    'notifications'
+    'notifications',
+    'clients',
 
 ]
 
