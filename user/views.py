@@ -617,6 +617,13 @@ class OnboardingStep2View(APIView):
         )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        summary="My Employee Profile",
+        description="Retrieve full employee profile information for the authenticated employee.",
+        responses={200: EmployeeProfileSerializer},
+    )
+)
 class MyEmployeeProfileView(RetrieveAPIView):
     # Authenticated employee views their full profile.
     permission_classes = [IsAuthenticated]
@@ -669,6 +676,10 @@ class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+    @extend_schema(tags=['admin'], summary="Update user details")
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
+    
     @extend_schema(tags=['admin'], summary="Block/update user")
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
@@ -708,6 +719,11 @@ class AdminBlockUserView(APIView):
         )
 
 
+@extend_schema(
+    tags=['admin'],
+    summary="Admin user list with filtering and ordering",
+    description="Retrieve a list of all users with options to filter by active status and provider, and order by creation date, email, or full name."
+)
 class AdminUserListView(ListAPIView):
     # Admin lists all users (employees + managers).
     permission_classes = [IsAdminUser]

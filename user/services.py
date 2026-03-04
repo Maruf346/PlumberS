@@ -1,7 +1,7 @@
 import random
 import string
 from django.core.cache import cache
-from user.models import User, UserSettings, AuthProvider
+from user.models import User, AuthProvider
 from django.contrib.auth.hashers import make_password
 from django.conf import settings
 import secrets
@@ -101,7 +101,7 @@ class RegistrationService:
         from user.models import EmployeeProfile
         EmployeeProfile.objects.create(user=user, onboarding_complete=False)
 
-        UserSettings.objects.create(user=user)
+        # UserSettings.objects.create(user=user)
         cache.delete(cache_key)
 
         from rest_framework_simplejwt.tokens import RefreshToken
