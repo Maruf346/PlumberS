@@ -40,69 +40,73 @@ class RegistrationService:
     # Service for user signup with OTP verification
     
     @staticmethod
-    def initiate_registration(full_name, email, password):
-        # Check if email already exists
+    def initiate_registration(email, password, username, birth_date=None):
         if User.objects.filter(email=email).exists():
             raise ValueError('Email already registered')
-        
+        if User.objects.filter(username__iexact=username).exists():
+            raise ValueError('Username already taken')
+
         # Generate OTP
         otp = OTPService.generate_otp()
         
         # store reg. data in Redis
         cache_key = f'registration_otp:{email}'
         registration_data = {
-            'full_name': full_name,
             'email': email,
+            'username': username,
+            'birth_date': str(birth_date) if birth_date else None,
             'password': make_password(password),
             'otp': otp
         }
-        
-        cache.set(
-            cache_key,
-            registration_data,
-            settings.OTP_EXPIRY_SECONDS
-        )
-        
-        # Send OTP email asynchronously
+        cache.set(cache_key, registration_data, settings.OTP_EXPIRY_SECONDS)
+
         from user.tasks import send_registration_otp_email
-        send_registration_otp_email.delay(email, otp, full_name)
-        
+        send_registration_otp_email.delay(email, otp, username)  # use username as name
+
         return {
-            'message': 'OTP sent to your email. Please verify to step forward.',
+            'message': 'OTP sent to your email. Please verify to complete registration.',
             'email': email,
             'expires_in_seconds': settings.OTP_EXPIRY_SECONDS
         }
-        
+
+
     @staticmethod
     def verify_and_complete_registration(email, otp):
         cache_key = f'registration_otp:{email}'
         registration_data = cache.get(cache_key)
-        
+
         if not registration_data:
             raise ValueError('OTP expired or invalid email')
-        
         if registration_data['otp'] != otp:
             raise ValueError('Invalid OTP')
-        
+
         # Create user account
+        from datetime import date
+        birth_date = None
+        if registration_data.get('birth_date'):
+            birth_date = date.fromisoformat(registration_data['birth_date'])
+
         user = User.objects.create(
             email=email,
-            full_name=registration_data['full_name'],
-            password=registration_data['password'],  # already hashed
-            is_active=False,
-            provider=AuthProvider.SELF
+            username=registration_data['username'],
+            birth_date=birth_date,
+            password=registration_data['password'],
+            is_active=True,
+            provider=AuthProvider.SELF,
+            is_staff=False,
+            is_superuser=False,
         )
-        
-        # Create default user settings
+
+        # Create empty employee profile (onboarding not complete yet)
+        from user.models import EmployeeProfile
+        EmployeeProfile.objects.create(user=user, onboarding_complete=False)
+
         UserSettings.objects.create(user=user)
-        
-        # Delete cache
         cache.delete(cache_key)
-        
-        # Generate JWT tokens
+
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(user)
-        
+
         return {
             'user': user,
             'refresh_token': str(refresh),

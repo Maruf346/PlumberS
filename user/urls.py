@@ -37,10 +37,19 @@ urlpatterns = [
     
     # Admin user management
     # path('', include(router.urls)),
-    path('approve/<uuid:id>/', UserApprovalViewSet.as_view(), name='user-approval'),
     path('total/', TotalUsersCountView.as_view(), name='total-users'),
     path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
     path('admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
     path('admin/userlist/', UserListView.as_view(), name='admin-user-list'),
-    path('stats/', UserStatsView.as_view(), name='user-stats'),
+    
+    # Onboarding
+    path('onboarding/step1/', OnboardingStep1View.as_view(), name='onboarding-step1'),
+    path('onboarding/step2/', OnboardingStep2View.as_view(), name='onboarding-step2'),
+    path('me/employee-profile/', MyEmployeeProfileView.as_view(), name='my-employee-profile'),
+
+    # Admin user management
+    path('admin/users/', AdminUserListView.as_view(), name='admin-user-list'),
+    path('admin/users/<uuid:id>/', AdminUserDetailView.as_view(), name='admin-user-detail'),
+    path('admin/users/<uuid:id>/block/', AdminBlockUserView.as_view(), name='admin-block-user'),
+    path('admin/managers/create/', AdminCreateManagerView.as_view(), name='admin-create-manager'),
 ]

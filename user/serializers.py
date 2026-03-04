@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer
-from .models import User, AuthProvider, UserSettings
+from .models import *
 from rest_framework import serializers
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
@@ -26,20 +26,17 @@ User = get_user_model()
 
 # ==================== REGISTRATION SERIALIZERS ====================
 class InitiateRegistrationSerializer(serializers.Serializer):
-    full_name = serializers.CharField(
-        max_length=40,
-        required=True,
-        error_messages={
-            'required': 'Full name is required',
-            'blank': 'Full name cannot be blank'
-        }
-    )
     email = serializers.EmailField(
         required=True,
         error_messages={
             'required': 'Email is required',
             'invalid': 'Enter a valid email address'
         }
+    )
+    username = serializers.CharField(
+        required=True,
+        max_length=150,
+        error_messages={'required': 'Username is required'}
     )
     password = serializers.CharField(
         min_length=8,
@@ -51,16 +48,22 @@ class InitiateRegistrationSerializer(serializers.Serializer):
             'min_length': 'Password must be at least 8 characters'
         }
     )
-    confirm_password = serializers.CharField(
-        min_length=8,
-        write_only=True,
+    birth_date = serializers.DateField(
         required=True,
-        style={'input_type': 'password'},
         error_messages={
-            'required': 'Password confirmation is required',
-            'min_length': 'Password must be at least 8 characters'
+            'invalid': 'Enter a valid date in YYYY-MM-DD format'
         }
     )
+    # confirm_password = serializers.CharField(
+    #     min_length=8,
+    #     write_only=True,
+    #     required=True,
+    #     style={'input_type': 'password'},
+    #     error_messages={
+    #         'required': 'Password confirmation is required',
+    #         'min_length': 'Password must be at least 8 characters'
+    #     }
+    # )
     
     def validate_email(self, value):
         value = value.lower().strip()    # strip() removes any leading, and trailing whitespaces
@@ -68,24 +71,25 @@ class InitiateRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError('This email is already registered')
         return value
     
-    def validate_full_name(self, value):
+    def validate_username(self, value):
         value = value.strip()
-        if len(value) < 2:
-            raise serializers.ValidationError('Full name must be at least 2 characters')
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError('This username is already taken')
         return value
     
-    def validate(self, data):
-        # Validate passwords match and meet Django's password validators
-        if data['password'] != data['confirm_password']:
-            raise serializers.ValidationError({'confirm_password': "Passwords do not match"})
+    
+    # def validate(self, data):
+    #     # Validate passwords match and meet Django's password validators
+    #     if data['password'] != data['confirm_password']:
+    #         raise serializers.ValidationError({'confirm_password': "Passwords do not match"})
         
-        # Validate password strength using Django's validators
-        try:
-            validate_password(data['password'])
-        except DjangoValidationError as e:
-            raise serializers.ValidationError({'password': list(e.messages)})
+    #     # Validate password strength using Django's validators
+    #     try:
+    #         validate_password(data['password'])
+    #     except DjangoValidationError as e:
+    #         raise serializers.ValidationError({'password': list(e.messages)})
         
-        return data
+    #     return data
 
 
 class VerifyRegistrationOTPSerializer(serializers.Serializer):
@@ -207,58 +211,41 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 # ==================== USER SERIALIZERS ====================
 
-# For admin: To manually approve users
-class UserApprovalSerializer(ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            'id', 'full_name', 'email', 'profile_picture', 
-            'phone', 'is_active', 'is_premium', 'provider',
-            'created_at', 'updated_at'
-            ]
-        read_only_fields = ['id', 'full_name', 'email', 'profile_picture', 'phone', 'is_premium', 'provider', 'created_at', 'updated_at']
-        
-
 class UserSerializer(ModelSerializer):
-    
+    role = serializers.CharField(read_only=True)
+    onboarding_complete = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
-            'id', 'full_name', 'email', 'phone',
-            'profile_picture', 'is_active', 'is_premium',
+            'id', 'full_name', 'email', 'username', 'phone',
+            'profile_picture', 'birth_date', 'is_active',
+            'role', 'onboarding_complete',
             'provider', 'created_at', 'updated_at'
         ]
-        read_only_fields = [
-            'id', 'is_active', 'is_premium', 'email',
-            'provider', 'created_at', 'updated_at'
-        ]
+        read_only_fields = ['id', 'is_active', 'email', 'provider', 'created_at', 'updated_at']
 
+    def get_onboarding_complete(self, obj):
+        if obj.is_employee:
+            try:
+                return obj.employee_profile.onboarding_complete
+            except EmployeeProfile.DoesNotExist:
+                return False
+        return True  # managers and admins skip onboarding
 
-class UserSettingsSerializer(ModelSerializer):
-    # Serializer for UserSettings model
-    
-    class Meta:
-        model = UserSettings
-        fields = [
-            'notification_enabled',
-            # 'appearance',
-            'updated_at'
-        ]
-        read_only_fields = ['updated_at']
 
 
 class UserProfileSerializer(ModelSerializer):
-    settings = UserSettingsSerializer(read_only=True)
     class Meta:
         model = User
         fields = [
             'id', 'full_name', 
             'email', 'profile_picture',
-            'is_active', 'is_premium',
+            'is_active', 
             'phone', 'provider', 
-            'created_at', 'updated_at', 'settings',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'is_active', 'email', 'is_premium', 'provider', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'is_active', 'email', 'provider', 'created_at', 'updated_at']
 
 
 class AdminProfileSerializer(ModelSerializer):
@@ -449,7 +436,7 @@ class GoogleOAuthSerializer(serializers.Serializer):
                 except Exception:
                     pass
             user.save()
-            UserSettings.objects.create(user=user)
+            # UserSettings.objects.create(user=user)
             
             try: 
                 # Send welcome email asynchronously
@@ -535,7 +522,7 @@ class AppleOAuthSerializer(serializers.Serializer):
         if created:
             user.set_unusable_password()
             user.save()
-            UserSettings.objects.create(user=user)
+            # UserSettings.objects.create(user=user)
             
             try: 
                 # Send welcome email asynchronously
@@ -584,34 +571,176 @@ class RegistrationResponseSerializer(serializers.Serializer):
     user = UserSerializer()
     
     
-# Admin dashboard serializers
-class UserStatsInputSerializer(serializers.Serializer):
-    year = serializers.IntegerField(
-        required=True,
-        min_value=2026,
-        max_value=datetime.now().year,
-        error_messages={
-            'required': 'Year parameter is required',
-            'invalid': 'Year must be a valid integer',
-            'min_value': 'Year must be 2026 (App Launch) or later',
-            'max_value': f'Year cannot be greater than current year [{datetime.now().year}]'
-        }
-    )
-    
-    def validate_year(self, value):
-        current_year = datetime.now().year
-        if value > current_year:
-            raise serializers.ValidationError(f'Year cannot be greater than current year {current_year}')
+
+
+# NEW .......................................................
+
+
+class EmergencyContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmergencyContact
+        fields = ['id', 'name', 'mobile', 'relation']
+
+
+class OnboardingStep1Serializer(serializers.ModelSerializer):
+    """
+    Step 1: Personal & professional details.
+    full_name and phone go to User; rest go to EmployeeProfile.
+    """
+    full_name = serializers.CharField(max_length=100)
+    phone = serializers.CharField()
+    emergency_contact = EmergencyContactSerializer()
+
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'full_name', 'phone',
+            'primary_skill', 'employee_id',
+            'profession', 'emergency_contact'
+        ]
+
+    def validate_employee_id(self, value):
+        if value and EmployeeProfile.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError('This Employee ID is already in use.')
         return value
 
+    def update(self, instance, validated_data):
+        # Update User fields
+        user = instance.user
+        user.full_name = validated_data.pop('full_name', user.full_name)
+        user.phone = validated_data.pop('phone', user.phone)
+        user.save()
 
-class MonthlyUserCountSerializer(serializers.Serializer):
-    month = serializers.IntegerField()
-    month_name = serializers.CharField()
-    count = serializers.IntegerField()
+        # Handle emergency contact
+        ec_data = validated_data.pop('emergency_contact', None)
+        if ec_data:
+            if instance.emergency_contact:
+                for attr, val in ec_data.items():
+                    setattr(instance.emergency_contact, attr, val)
+                instance.emergency_contact.save()
+            else:
+                ec = EmergencyContact.objects.create(**ec_data)
+                instance.emergency_contact = ec
+
+        # Update profile fields
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.save()
+        return instance
+
+
+class OnboardingStep2Serializer(serializers.ModelSerializer):
+    """
+    Step 2: Work & safety profile.
+    Marks onboarding complete on save.
+    """
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'uses_company_vehicle',
+            'drivers_license_number',
+            'license_expiry_date',
+            'drivers_license_file',
+        ]
+
+    def update(self, instance, validated_data):
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.onboarding_complete = True
+        instance.save()
+        return instance
+
+
+class EmployeeProfileSerializer(serializers.ModelSerializer):
+    # Full read serializer for employee profile (used in detail views).
     
+    emergency_contact = EmergencyContactSerializer(read_only=True)
+    role = serializers.CharField(source='user.role', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    full_name = serializers.CharField(source='user.full_name', read_only=True)
+    phone = serializers.CharField(source='user.phone', read_only=True)
+    profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
+
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'id', 'full_name', 'email', 'phone', 'profile_picture',
+            'role', 'primary_skill', 'employee_id', 'profession',
+            'emergency_contact', 'uses_company_vehicle',
+            'drivers_license_number', 'license_expiry_date',
+            'drivers_license_file', 'onboarding_complete',
+            'created_at', 'updated_at'
+        ]
+
+
+class AdminCreateManagerSerializer(serializers.Serializer):
+    # Admin uses this to create a manager account directly.
     
-class YearlyUserGrowthSerializer(serializers.Serializer):
-    year = serializers.IntegerField()
-    total_users = serializers.IntegerField()
-    monthly_counts = MonthlyUserCountSerializer(many=True)
+    first_name = serializers.CharField(max_length=50)
+    last_name = serializers.CharField(max_length=50)
+    email = serializers.EmailField()
+    phone = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(min_length=8, write_only=True)
+    confirm_password = serializers.CharField(min_length=8, write_only=True)
+    department = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        value = value.lower().strip()
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        department = validated_data.pop('department', '')
+        notes = validated_data.pop('notes', '')
+        first_name = validated_data.pop('first_name')
+        last_name = validated_data.pop('last_name')
+
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            password=validated_data['password'],
+            full_name=f"{first_name} {last_name}",
+            phone=validated_data.get('phone', ''),
+            is_staff=True,       # manager
+            is_superuser=False,
+            is_active=True,
+        )
+        ManagerProfile.objects.create(user=user, department=department, notes=notes)
+        # UserSettings.objects.create(user=user)
+        return user
+
+
+class AdminEmployeeListSerializer(serializers.ModelSerializer):
+    # Lightweight serializer for admin user list view.
+    
+    role = serializers.CharField(read_only=True)
+    onboarding_complete = serializers.SerializerMethodField()
+    primary_skill = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'username', 'phone',
+            'profile_picture', 'is_active', 'role',
+            'onboarding_complete', 'primary_skill',
+            'created_at'
+        ]
+
+    def get_onboarding_complete(self, obj):
+        try:
+            return obj.employee_profile.onboarding_complete
+        except EmployeeProfile.DoesNotExist:
+            return False
+
+    def get_primary_skill(self, obj):
+        try:
+            return obj.employee_profile.primary_skill
+        except EmployeeProfile.DoesNotExist:
+            return None

@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, max_retries=3) # Task will retry up to 3 times if it fails.
 def send_registration_otp_email(self, email, otp, full_name):
-    subject = 'Autointel Diagnostics App - Registration OTP'
+    subject = 'Adelaide Plumbing and Gasfitting - Registration OTP'
     message = f'''
     Hi {full_name},
 
-    Thank you for registering with Autointel Diagnostics App!
+    Thank you for registering with Adelaide Plumbing and Gasfitting!
 
     Your OTP for email verification is: {otp}
 
@@ -21,7 +21,7 @@ def send_registration_otp_email(self, email, otp, full_name):
     If you didn't request this registration, please ignore this email.
 
     Best regards,
-    Autointel Diagnostics Team
+    Adelaide Plumbing and Gasfitting Team
         '''
         
     try:
@@ -50,7 +50,7 @@ def send_password_reset_otp_email(self, email, otp, full_name):
     """
     Send OTP email for password reset
     """
-    subject = 'Autointel Diagnostics App - Password Reset OTP'
+    subject = 'Adelaide Plumbing and Gasfitting - Password Reset OTP'
     message = f'''
     Hi {full_name},
 
@@ -63,7 +63,7 @@ def send_password_reset_otp_email(self, email, otp, full_name):
     If you didn't request this password reset, please ignore this email and ensure your account is secure.
 
     Best regards,
-    Autointel Diagnostics Team
+    Adelaide Plumbing and Gasfitting Team
     '''
     
     try:
@@ -84,22 +84,22 @@ def send_password_reset_otp_email(self, email, otp, full_name):
 def send_welcome_email(email, full_name):
     # Send welcome email after successful registration
     
-    subject = 'Welcome to Autointel Diagnostics!'
+    subject = 'Welcome to Adelaide Plumbing and Gasfitting!'
     message = f'''
     Hi {full_name},
 
-    Welcome to Autointel Diagnostics App!
+    Welcome to Adelaide Plumbing and Gasfitting!
 
     Your account has been successfully created. You can now:
-    - Register your vehicles
-    - Track maintenance schedules
-    - Get diagnostic alerts
+    - View your assigned jobs
+    - Complete safety checks
+    - Manage your daily schedule
     - And much more!
 
-    Get started by adding your first vehicle.
+    Please complete your profile setup to get started.
 
     Best regards,
-    Autointel Diagnostics Team
+    Adelaide Plumbing and Gasfitting Team
     '''
     
     try:

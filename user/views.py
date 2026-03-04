@@ -50,9 +50,10 @@ class InitiateRegistrationView(APIView):
         
         try:
             result = RegistrationService.initiate_registration(
-                full_name=serializer.validated_data['full_name'],
                 email=serializer.validated_data['email'],
-                password=serializer.validated_data['password']
+                password=serializer.validated_data['password'],
+                username=serializer.validated_data['username'],
+                birth_date=serializer.validated_data.get('birth_date'),
             )
             
             logger.info(f'Registration initiated for email: {serializer.validated_data['email']}')
@@ -267,7 +268,6 @@ class ResetPasswordView(APIView):
     #     400: OpenApiResponse(description="Invalid credentials"),
     # },
 )
-@method_decorator(ratelimit(key='ip', rate='120/h', method='POST', block=True), name='dispatch')
 class UserLoginView(APIView):
     permission_classes = [AllowAny]
     serializer_class = UserLoginSerializer
@@ -298,7 +298,6 @@ class UserLoginView(APIView):
     description="Logout user by blacklisting refresh token and clearing session.",
     responses={205: OpenApiResponse(description="Logged out successfully")}
 )
-@method_decorator(ratelimit(key='user', rate='120/h', method='POST', block=False), name='dispatch')
 class UserLogoutView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = None
@@ -332,7 +331,6 @@ class UserLogoutView(APIView):
     description="Change password for authenticated user.",
     request=ChangePasswordSerializer
 )
-@method_decorator(ratelimit(key='user', rate='85/h', method='POST', block=True), name='dispatch')
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ChangePasswordSerializer
@@ -381,9 +379,6 @@ class ChangePasswordView(APIView):
         responses={204: OpenApiResponse(description="Account deleted")},
     ),
 )
-@method_decorator(ratelimit(key='user', rate='180/h', method='GET', block=False), name='dispatch')
-@method_decorator(ratelimit(key='user', rate='120/h', method=['PUT', 'PATCH'], block=True), name='dispatch')
-@method_decorator(ratelimit(key='user', rate='125/d', method='DELETE', block=True), name='dispatch') 
 class MyProfileView(RetrieveUpdateDestroyAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -398,7 +393,6 @@ class MyProfileView(RetrieveUpdateDestroyAPIView):
     description="Retrieve public profile information of a user by ID.",
     responses=UserProfileSerializer,
 )  
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=False), name='dispatch')
 class PublicProfileView(RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
@@ -411,102 +405,6 @@ class PublicProfileView(RetrieveAPIView):
 ##                     Google Sign-In Views and Helper Function                    ##
 #####################################################################################
 
-@extend_schema(
-    summary="Google login redirect",
-    description="Redirect user to Google OAuth authorization page.",
-    responses={302: OpenApiResponse(description="Redirect to Google OAuth")},
-)
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=True), name='dispatch')
-class GoogleLoginRedirectView(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        flow = Flow.from_client_config(
-            {
-                'web': {
-                    'client_id': settings.GOOGLE_CLIENT_ID,
-                    'client_secret': settings.GOOGLE_CLIENT_SECRET,
-                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                    'token_uri': 'https://oauth2.googleapis.com/token'
-                }
-            },
-            scopes=[
-                'openid',
-                'email',
-                'profile',
-            ],
-            redirect_uri=settings.GOOGLE_REDIRECT_URI
-        )
-        
-        authorization_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='select_account'
-        )
-        
-        request.session['google_oauth_state'] = state
-        return redirect(authorization_url)
-    
-    
-@extend_schema(
-    summary="Google OAuth callback",
-    description="Handle Google OAuth callback and return authentication tokens.",
-    responses={
-        200: OpenApiResponse(description="Google login successful"),
-        302: OpenApiResponse(description="Redirect to frontend"),
-        400: OpenApiResponse(description="OAuth validation failed"),
-    },
-)
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=True), name='dispatch')
-class GoogleOAuthCallbackView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request):
-        state = request.session.get('google_oauth_state')
-        
-        flow = Flow.from_client_config(
-            {
-                'web': {
-                    'client_id': settings.GOOGLE_CLIENT_ID,
-                    'client_secret': settings.GOOGLE_CLIENT_SECRET,
-                    'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
-                    'token_uri': 'https://oauth2.googleapis.com/token'
-                }
-            },
-            scopes = [
-                'openid',
-                'https://www.googleapis.com/auth/userinfo.email',
-                'https://www.googleapis.com/auth/userinfo.profile'
-            ],
-            state=state,
-            redirect_uri = settings.GOOGLE_REDIRECT_URI
-        )
-        
-        # Extracts code from callback URL --> Sends it to Google’s token endpoint
-        flow.fetch_token(authorization_response=request.build_absolute_uri())
-        
-        # Reuse existing serializer logic
-        try:
-            serializer = GoogleOAuthSerializer(
-                data={'id_token': flow.credentials.id_token}
-            )
-            serializer.is_valid(raise_exception=True)
-        except ValidationError as e:
-            return redirect(
-                f'{settings.FRONTEND_LOGIN_ERROR_URL}'
-                f'?error={str(e.detail[0])}'
-            )
-        
-        return Response(serializer.validated_data)  # comment this out when frontend is ready
-    
-        # Uncomment below to redirect to frontend with tokens in query params
-        # return redirect(
-        #     f'{settings.FRONTEND_LOGIN_SUCCESS_URL}'
-        #     f'?access={serializer.validated_data['tokens']['access']}'
-        #     f'refresh={serializer.validated_data['token']['refresh']}'
-        #     f'is_new={serializer.validated_data['is_new_user']}'
-        # )
-        
 
 class GoogleLoginMobileView(APIView):
     permission_classes = [AllowAny]
@@ -531,83 +429,6 @@ class GoogleLoginMobileView(APIView):
 ##                     Apple Sign-In Views and Helper Function                     ##
 #####################################################################################
 
-# helper function
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=True), name='dispatch')
-def generate_apple_client_secret():
-    return jwt.encode(
-        {
-            'iss': settings.APPLE_TEAM_ID,          # Issuer: Identifies who is signing the token
-            'iat': int(time.time()),                # Issued At (current timestamp)
-            'exp': int(time.time()) + 86400 * 180,  # Expiry time(180 days); Apple allows max 6 months
-            'aud': 'https://appleid.apple.com',     # Audience (Always fixed)
-            'sub': settings.APPLE_CLIENT_ID         # Subject: Tells Apple which app this token is for
-        },
-        settings.APPLE_PRIVATE_KEY,                 # .p8 private key (Must be kept secret)
-        algorithm='ES256',                          # Algo: Elliptic Curve signing
-        headers={'kid': settings.APPLE_KEY_ID}
-    )
-    
-
-@extend_schema(
-    summary="Apple login redirect",
-    description="Redirect user to Apple Sign-In authorization page.",
-    responses={302: OpenApiResponse(description="Redirect to Apple OAuth")},
-)
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=True), name='dispatch')
-class AppleLoginRedirectView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request):
-        params = {
-            'response_type': 'code id_token',   
-            'response_code': 'form_post',       # Apple sends response as POST form
-            'client_id': settings.APPLE_CLIENT_ID,
-            'redirect_uri': settings.APPLE_REDIRECT_URI,
-            'scope': 'name email'
-        }
-        
-        query = '&'.join(f'{k}={v}' for k, v in params.items())
-        return redirect(f'https://appleid.apple.com/auth/authorize?{query}')
-    
-    
-@extend_schema(
-    summary="Apple OAuth callback",
-    description="Handle Apple OAuth callback and return authentication tokens.",
-    responses={
-        200: OpenApiResponse(description="Apple login successful"),
-        302: OpenApiResponse(description="Redirect to frontend"),
-        400: OpenApiResponse(description="Apple OAuth failed"),
-    },
-)
-@method_decorator(ratelimit(key='ip', rate='120/h', method='GET', block=True), name='dispatch')
-class AppleOAuthCallbackView(APIView):
-    permission_classes = [AllowAny]
-    
-    def post(self, request):
-        id_token = request.data.get('id_token')
-        user = request.data.get('user')
-        
-        if not id_token:
-            return redirect(f'{settings.FRONTEND_LOGIN_ERROR_URL}?error=Apple login failed')
-        
-        try:
-            serializer = AppleOAuthCallbackView(data = {'id_token': id_token, 'user': user})
-            serializer.is_valid(raise_exception=True)
-        except ValidationError as e:
-            return redirect(
-                f'{settings.FRONTEND_LOGIN_ERROR_URL}'
-                f'?error=str{e.detail[0]}'
-            )
-        
-        return Response(serializer.validated_data)
-
-        # Uncomment below to redirect to frontend with tokens in query params
-        # return redirect(
-        #     f"{settings.FRONTEND_LOGIN_SUCCESS_URL}"
-        #     f"?access={serializer.validated_data['tokens']['access']}"
-        #     f"&refresh={serializer.validated_data['tokens']['refresh']}"
-        #     f"&is_new={serializer.validated_data['is_new_user']}"
-        # )
 
 
 @extend_schema(
@@ -615,7 +436,6 @@ class AppleOAuthCallbackView(APIView):
     description="Accepts Apple ID token and returns JWT tokens.",
     responses={200: OpenApiResponse(description="Login successful")}
 )
-@method_decorator(ratelimit(key='ip', rate='120/h', method='POST', block=True), name='dispatch')
 class AppleLoginMobileView(APIView):
     permission_classes = [AllowAny]
     serializer_class = AppleOAuthSerializer
@@ -636,7 +456,6 @@ class AppleLoginMobileView(APIView):
     description="Authenticate admin user and return JWT tokens.",
     request=AdminLoginSerializer
 )
-@method_decorator(ratelimit(key='ip', rate='120/h', method='POST', block=True), name='dispatch')
 class AdminLoginView(APIView):
     permission_classes = [AllowAny]
     serializer_class = AdminLoginSerializer
@@ -684,56 +503,12 @@ class AdminLoginView(APIView):
         responses=AdminProfileSerializer,
     ),
 )
-@method_decorator(ratelimit(key='user', rate='100/h', method='GET', block=False), name='dispatch')
-@method_decorator(ratelimit(key='user', rate='120/h', method=['PUT', 'PATCH'], block=True), name='dispatch')
 class AdminProfileView(RetrieveUpdateAPIView):
     serializer_class = AdminProfileSerializer
     permission_classes = [IsAdminUser]
     
     def get_object(self):
         return self.request.user
-
-
-@extend_schema_view(
-    get=extend_schema(
-        tags=["admin"],
-        summary="Retrieve user for approval",
-        description="Retrieve a single user by ID for approval review",
-        responses=UserApprovalSerializer,
-    ),
-    put=extend_schema(
-        tags=["admin"],
-        summary="Update user approval",
-        description="Fully update user approval status (admin use)",
-        request=UserApprovalSerializer,
-        responses=UserApprovalSerializer,
-    ),
-    patch=extend_schema(
-        tags=["admin"],
-        summary="Partially update user approval",
-        description="Partially update approval-related fields",
-        request=UserApprovalSerializer,
-        responses=UserApprovalSerializer,
-    ),
-    delete=extend_schema(
-        tags=["admin"],
-        summary="Delete user",
-        description="Delete user account permanently",
-        responses={204: None},
-    ),
-)
-@method_decorator (ratelimit(key='user_or_ip', rate='300/h', method='GET', block=False), name='dispatch')
-@method_decorator(ratelimit(key='user_or_ip', rate='220/h', method=['PUT', 'PATCH'], block=True), name='dispatch')
-@method_decorator(ratelimit(key='user_or_ip', rate='120/h', method='DELETE', block=True), name='dispatch')
-class UserApprovalViewSet(RetrieveUpdateDestroyAPIView):
-    queryset = User.objects.all()
-    permission_classes = [IsAdminUser]
-    serializer_class = UserApprovalSerializer
-    ordering_fields = ["created_at", "updated_at", "email", "full_name"]
-    filterset_fields = ["is_active", "is_premium", "provider"]
-    ordering = ["-created_at"]
-    lookup_field = 'id'
-       
 
 @extend_schema(
     tags=["admin"],
@@ -748,7 +523,6 @@ class UserApprovalViewSet(RetrieveUpdateDestroyAPIView):
         )
     },
 )
-@method_decorator(ratelimit(key='user', rate='130/h', method='GET', block=False), name='dispatch')
 class TotalUsersCountView(APIView):
     permission_classes = [IsAdminUser]
     
@@ -758,80 +532,7 @@ class TotalUsersCountView(APIView):
             {'total_users': total_users}, 
             status=status.HTTP_200_OK
         )
-        
-        
-@extend_schema(
-    tags=["admin"],
-    summary="Yearly user growth statistics",
-    description="Return monthly user registration statistics for a given year.",
-    parameters=[
-        OpenApiParameter(
-            name="year",
-            type=int,
-            required=True,
-            location=OpenApiParameter.QUERY,
-            description="Year for statistics (e.g., 2025)",
-        )
-    ],
-    responses={
-        200: YearlyUserGrowthSerializer,
-        400: OpenApiResponse(description="Invalid or missing year parameter"),
-    },
-)
-@method_decorator(ratelimit(key='user', rate='180/h', method='GET', block=False), name='dispatch')
-@method_decorator(cache_page(60 * 5), name='dispatch')
-class UserStatsView(APIView):
-    permission_classes = [IsAdminUser]
-    
-    def get(self, request):
-        year_param = request.query_params.get('year')
-        
-        if not year_param:
-            return Response(
-                {'error': 'Year query parameter is required: .../stats/?year=2025'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        input_serializer = UserStatsInputSerializer(data={'year':year_param})
-        input_serializer.is_valid(raise_exception=True)
-        year = input_serializer.validated_data['year']
-        
-        queryset = (
-            User.objects
-            .filter(created_at__year=year)
-            .annotate(month=ExtractMonth('created_at'))
-            .values('month')
-            .annotate(count=Count('id'))
-            .order_by('month')
-        )
-        
-        month_count_map = {item['month']: item['count'] for item in queryset}
-        
-        monthly_data = []
-        total_users = 0
-        
-        for month_num in range(1, 13):
-            count = month_count_map.get(month_num, 0)
-            total_users += count
-            
-            monthly_data.append({
-                'month': month_num,
-                'month_name': calendar.month_name[month_num],
-                'count': count
-            })
-        
-        response_data = {
-            'year': year,
-            'total_users': total_users,
-            'monthly_counts': monthly_data
-        }
-        
-        serializer = YearlyUserGrowthSerializer(response_data)
-        
-        logger.info(f'Admin {request.user.email} requested registration stats for {year}')
-        
-        return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
         
 @extend_schema(
     tags=["admin"],
@@ -843,6 +544,177 @@ class UserListView(ListAPIView):
     queryset = User.objects.filter(is_staff=False).order_by('-created_at')
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
-    filterset_fields = ['is_active', 'is_premium', 'provider']
+    filterset_fields = ['is_active', 'provider']
     ordering_fields = ['created_at', 'email', 'full_name']
     ordering = ['-created_at']
+    
+    
+    
+# ==================== ONBOARDING VIEWS ====================
+
+class OnboardingStep1View(APIView):
+    """
+    Employee fills personal/professional details after registration.
+    Requires auth. Creates or updates EmployeeProfile step 1.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = OnboardingStep1Serializer
+
+    @extend_schema(
+        summary="Onboarding Step 1",
+        description="Submit personal and professional details during onboarding."
+    )
+    def patch(self, request):
+        if not request.user.is_employee:
+            return Response(
+                {'error': 'Only employees go through onboarding.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            profile = request.user.employee_profile
+        except EmployeeProfile.DoesNotExist:
+            profile = EmployeeProfile.objects.create(user=request.user)
+
+        serializer = self.serializer_class(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {'message': 'Step 1 complete.', 'data': serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+
+class OnboardingStep2View(APIView):
+    # Employee fills work & safety profile (step 2). Marks onboarding complete.
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = OnboardingStep2Serializer
+
+    @extend_schema(
+        summary="Onboarding Step 2",
+        description="Submit work and safety details. Marks onboarding as complete."
+    )
+    def patch(self, request):
+        if not request.user.is_employee:
+            return Response(
+                {'error': 'Only employees go through onboarding.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            profile = request.user.employee_profile
+        except EmployeeProfile.DoesNotExist:
+            return Response(
+                {'error': 'Please complete step 1 first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = self.serializer_class(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {'message': 'Onboarding complete.', 'data': serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+
+class MyEmployeeProfileView(RetrieveAPIView):
+    # Authenticated employee views their full profile.
+    permission_classes = [IsAuthenticated]
+    serializer_class = EmployeeProfileSerializer
+
+    def get_object(self):
+        try:
+            return self.request.user.employee_profile
+        except EmployeeProfile.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Employee profile not found. Please complete onboarding.')
+
+
+# ==================== ADMIN USER MANAGEMENT VIEWS ====================
+
+class AdminCreateManagerView(APIView):
+    # Admin creates a manager account directly.
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminCreateManagerSerializer
+
+    @extend_schema(
+        tags=['admin'],
+        summary="Create manager account",
+        description="Admin creates a new manager user with profile."
+    )
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(
+            {
+                'message': 'Manager account created successfully.',
+                'user': UserProfileSerializer(user, context={'request': request}).data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    Admin views, updates, or deletes any user.
+    PATCH is_active=False to block a user.
+    """
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminEmployeeListSerializer
+    queryset = User.objects.all()
+    lookup_field = 'id'
+
+    @extend_schema(tags=['admin'], summary="Get user detail")
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(tags=['admin'], summary="Block/update user")
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
+
+    @extend_schema(tags=['admin'], summary="Delete user")
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+
+
+class AdminBlockUserView(APIView):
+    # Dedicated endpoint to toggle user active status (block/unblock).
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        tags=['admin'],
+        summary="Block or unblock a user",
+        responses={200: inline_serializer(
+            name='BlockUserResponse',
+            fields={'message': serializers.CharField(), 'is_active': serializers.BooleanField()}
+        )}
+    )
+    def post(self, request, id):
+        try:
+            user = User.objects.get(id=id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.is_superuser:
+            return Response({'error': 'Cannot block an admin.'}, status=status.HTTP_403_FORBIDDEN)
+
+        user.is_active = not user.is_active
+        user.save()
+        state = 'unblocked' if user.is_active else 'blocked'
+        return Response(
+            {'message': f'User {state} successfully.', 'is_active': user.is_active},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminUserListView(ListAPIView):
+    # Admin lists all users (employees + managers).
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminEmployeeListSerializer
+    filterset_fields = ['is_active', 'is_staff', 'provider']
+    ordering_fields = ['created_at', 'email', 'full_name']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return User.objects.exclude(is_superuser=True).order_by('-created_at')
