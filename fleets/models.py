@@ -104,9 +104,13 @@ class Vehicle(models.Model):
 
         new_status = VehicleStatus.HEALTHY
 
-        # Priority 3 — inspection due (lowest)
-        last = self.last_inspection_date
-        if last is None or (timezone.now() - last).days > 7:
+        # Only submitted inspections count for history
+        submitted = self.inspections.filter(status='submitted')
+
+        # Priority 3 — inspection due
+        last = submitted.order_by('-submitted_at').first()
+        last_date = last.submitted_at if last else None
+        if last_date is None or (timezone.now() - last_date).days > 7:
             new_status = VehicleStatus.INSPECTION_DUE
 
         # Priority 2 — service overdue
@@ -117,8 +121,8 @@ class Vehicle(models.Model):
         ):
             new_status = VehicleStatus.SERVICE_OVERDUE
 
-        # Priority 1 — open issue from any inspection (highest)
-        if self.inspections.filter(has_open_issue=True).exists():
+        # Priority 1 — open issue from any submitted inspection
+        if submitted.filter(has_open_issue=True).exists():
             new_status = VehicleStatus.ISSUE_REPORTED
 
         self.status = new_status
@@ -126,9 +130,10 @@ class Vehicle(models.Model):
 
     @property
     def last_inspection_date(self):
-        """Returns the timestamp of the most recent inspection, or None."""
-        latest = self.inspections.order_by('-inspected_at').first()
-        return latest.inspected_at if latest else None
+        latest = self.inspections.filter(
+            status='submitted'
+        ).order_by('-submitted_at').first()
+        return latest.submitted_at if latest else None
 
     @property
     def is_service_overdue(self):
