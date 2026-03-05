@@ -673,6 +673,51 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         ]
 
 
+class EmployeeProfileUpdateSerializer(serializers.ModelSerializer):
+    """
+    Employee updates their own profile.
+    User-level fields (full_name, phone, profile_picture) are handled
+    alongside EmployeeProfile fields in the update method.
+    """
+    full_name = serializers.CharField(max_length=100, required=False)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    profile_picture = serializers.ImageField(required=False)
+
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'full_name', 'phone', 'profile_picture',
+            'profession', 'employee_id',
+        ]
+
+    def validate_employee_id(self, value):
+        if not value:
+            return value
+        qs = EmployeeProfile.objects.filter(employee_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('This Employee ID is already in use.')
+        return value
+
+    def update(self, instance, validated_data):
+        # Split User-level fields from EmployeeProfile fields
+        user = instance.user
+        user_fields = ['full_name', 'phone', 'profile_picture']
+
+        for field in user_fields:
+            if field in validated_data:
+                setattr(user, field, validated_data.pop(field))
+        user.save()
+
+        # Update EmployeeProfile fields
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.save()
+
+        return instance
+
+
 class AdminCreateManagerSerializer(serializers.Serializer):
     # Admin uses this to create a manager account directly.
     

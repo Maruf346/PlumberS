@@ -637,6 +637,64 @@ class MyEmployeeProfileView(RetrieveAPIView):
             raise NotFound('Employee profile not found. Please complete onboarding.')
 
 
+class MyEmployeeProfileUpdateView(APIView):
+    """
+    PATCH — employee updates their own profile fields.
+    DELETE — employee deletes their own account.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = EmployeeProfileUpdateSerializer
+
+    def get_object(self, request):
+        try:
+            return request.user.employee_profile
+        except EmployeeProfile.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Employee profile not found. Please complete onboarding first.')
+
+    @extend_schema(
+        summary="Update my employee profile",
+        description="Employee updates their own profile picture, name, phone, profession, or employee ID.",
+        request=EmployeeProfileUpdateSerializer,
+        responses={200: EmployeeProfileSerializer}
+    )
+    def patch(self, request):
+        if not request.user.is_employee:
+            return Response(
+                {'error': 'Only employees can access this endpoint.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        profile = self.get_object(request)
+        serializer = self.serializer_class(
+            profile,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                'message': 'Profile updated successfully.',
+                'data': EmployeeProfileSerializer(profile, context={'request': request}).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @extend_schema(
+        summary="Delete my account",
+        description="Employee permanently deletes their own account.",
+        responses={204: None}
+    )
+    def delete(self, request):
+        user = request.user
+        user.delete()
+        return Response(
+            {'message': 'Account deleted successfully.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+
 # ==================== ADMIN USER MANAGEMENT VIEWS ====================
 
 class AdminCreateManagerView(APIView):

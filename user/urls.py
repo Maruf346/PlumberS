@@ -32,20 +32,21 @@ urlpatterns = [
     path('login/', UserLoginView.as_view(), name='login'),
     path('logout/', UserLogoutView.as_view(), name='logout'),
     # path('password/change/', ChangePasswordView.as_view(), name='password-change'),
-    path('me/', MyProfileView.as_view(), name='me'),
-    path('profile/<uuid:id>/', PublicProfileView.as_view(), name='profile'),
+    # path('me/', MyProfileView.as_view(), name='me'),
+    # path('profile/<uuid:id>/', PublicProfileView.as_view(), name='profile'),
     
     # Admin user management
     # path('', include(router.urls)),
-    path('total/', TotalUsersCountView.as_view(), name='total-users'),
+    # path('total/', TotalUsersCountView.as_view(), name='total-users'),
     path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
     path('admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
-    path('admin/userlist/', UserListView.as_view(), name='admin-user-list'),
+    # path('admin/userlist/', UserListView.as_view(), name='admin-user-list'),
     
     # Onboarding
     path('onboarding/step1/', OnboardingStep1View.as_view(), name='onboarding-step1'),
     path('onboarding/step2/', OnboardingStep2View.as_view(), name='onboarding-step2'),
     path('me/employee-profile/', MyEmployeeProfileView.as_view(), name='my-employee-profile'),
+    path('me/employee-profile/update/', MyEmployeeProfileUpdateView.as_view(), name='my-employee-profile-update'),
 
     # Admin user management
     path('admin/users/', AdminUserListView.as_view(), name='admin-user-list'),
