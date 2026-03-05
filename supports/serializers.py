@@ -94,3 +94,113 @@ class PrivacyPolicySerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['updated_at']
+        
+        
+# ==================== FEEDBACK ====================
+
+class FeedbackSubmitSerializer(serializers.ModelSerializer):
+    """Employee submits feedback. user is set automatically in the view."""
+
+    class Meta:
+        model = Feedback
+        fields = [
+            'id', 'first_name', 'last_name',
+            'email', 'phone', 'country',
+            'language', 'message',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate_email(self, value):
+        return value.lower().strip()
+
+
+class FeedbackListSerializer(serializers.ModelSerializer):
+    """Lightweight — for admin list view."""
+    submitted_by = serializers.CharField(source='user.full_name', read_only=True)
+    submitted_by_email = serializers.CharField(source='user.email', read_only=True)
+
+    class Meta:
+        model = Feedback
+        fields = [
+            'id', 'first_name', 'last_name', 'email',
+            'submitted_by', 'submitted_by_email',
+            'country', 'language', 'created_at'
+        ]
+
+
+class FeedbackDetailSerializer(serializers.ModelSerializer):
+    """Full detail — for admin retrieve view."""
+    submitted_by = serializers.CharField(source='user.full_name', read_only=True)
+    submitted_by_id = serializers.UUIDField(source='user.id', read_only=True)
+    submitted_by_email = serializers.CharField(source='user.email', read_only=True)
+
+    class Meta:
+        model = Feedback
+        fields = [
+            'id', 'submitted_by', 'submitted_by_id', 'submitted_by_email',
+            'first_name', 'last_name', 'email', 'phone',
+            'country', 'language', 'message',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+
+
+# ==================== ISSUE REPORT ====================
+
+class IssueReportSubmitSerializer(serializers.ModelSerializer):
+    """
+    Employee submits an issue report with up to 5 photos.
+    user is set automatically in the view.
+    """
+
+    class Meta:
+        model = IssueReport
+        fields = [
+            'id', 'title', 'description',
+            'photo_1', 'photo_2', 'photo_3',
+            'photo_4', 'photo_5',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, data):
+        # Ensure at least title and description are present
+        if not data.get('title', '').strip():
+            raise serializers.ValidationError({'title': 'Title is required.'})
+        if not data.get('description', '').strip():
+            raise serializers.ValidationError({'description': 'Description is required.'})
+        return data
+
+
+class IssueReportListSerializer(serializers.ModelSerializer):
+    """Lightweight — for admin list view."""
+    submitted_by = serializers.CharField(source='user.full_name', read_only=True)
+    submitted_by_email = serializers.CharField(source='user.email', read_only=True)
+    photo_count = serializers.ReadOnlyField()
+
+    class Meta:
+        model = IssueReport
+        fields = [
+            'id', 'title', 'submitted_by',
+            'submitted_by_email', 'photo_count',
+            'created_at'
+        ]
+
+
+class IssueReportDetailSerializer(serializers.ModelSerializer):
+    """Full detail — for admin retrieve view."""
+    submitted_by = serializers.CharField(source='user.full_name', read_only=True)
+    submitted_by_id = serializers.UUIDField(source='user.id', read_only=True)
+    submitted_by_email = serializers.CharField(source='user.email', read_only=True)
+    photo_count = serializers.ReadOnlyField()
+
+    class Meta:
+        model = IssueReport
+        fields = [
+            'id', 'submitted_by', 'submitted_by_id', 'submitted_by_email',
+            'title', 'description',
+            'photo_1', 'photo_2', 'photo_3', 'photo_4', 'photo_5',
+            'photo_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = fields

@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, views
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from rest_framework.generics import UpdateAPIView, RetrieveAPIView
+from rest_framework.generics import UpdateAPIView, RetrieveAPIView, ListAPIView
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from .serializers import *
@@ -12,6 +12,13 @@ from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from notifications.services import NotificationTemplates
 
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.shortcuts import get_object_or_404
+
+from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +27,14 @@ logger = logging.getLogger(__name__)
 # For admin
 @extend_schema_view(
     list=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="List all support requests",
         description="Admin can retrieve a list of all support tickets submitted by users. "
                     "Supports filtering by user or email, searching by email/username, "
                     "and ordering by creation date."
     ),
     retrieve=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Get a specific support request",
         description="Retrieve the details of a specific support ticket by its ID. "
                     "Admin only."
@@ -99,32 +106,32 @@ class ListFAQViewSet(viewsets.ReadOnlyModelViewSet):
     
 @extend_schema_view(
     list=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="List FAQs (Admin)",
         description="Admin view to list all FAQs."
     ),
     retrieve=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Retrieve FAQ",
         description="Retrieve details of a specific FAQ."
     ),
     create=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Create FAQ",
         description="Admin can create a new FAQ."
     ),
     update=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Update FAQ",
         description="Admin can fully update an existing FAQ."
     ),
     partial_update=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Partially update FAQ",
         description="Admin can partially update an existing FAQ."
     ),
     destroy=extend_schema(
-        tags=['admin'],
+        # tags=['admin'],
         summary="Delete FAQ",
         description="Admin can delete an FAQ."
     ),
@@ -155,7 +162,7 @@ class AboutUsPublicView(RetrieveAPIView):
     
 
 @extend_schema(
-    tags=['admin'],
+    # tags=['admin'],
     summary="Update About Us",
     description="Admin can update the About Us content. Only PATCH requests are allowed."
 )
@@ -187,7 +194,7 @@ class TermsAndConditionsPublicView(RetrieveAPIView):
 
 
 @extend_schema(
-    tags=['admin'],
+    # tags=['admin'],
     summary="Update Terms and Conditions",
     description="Admin can update the Terms and Conditions content. Only PATCH requests are allowed."
 )
@@ -220,7 +227,7 @@ class PrivacyPolicyPublicView(RetrieveAPIView):
         
     
 @extend_schema(
-    tags=['admin'],
+    # tags=['admin'],
     summary="Update Privacy Policy",
     description="Admin can update the Privacy Policy content. Only PATCH requests are allowed."
 )
@@ -236,3 +243,127 @@ class PrivacyPolicyAdminUpdateView(UpdateAPIView):
     def perform_update(self, serializer):
         serializer.save()
         logger.info('Privacy Policy updated')
+        
+
+# ==================== FEEDBACK ====================
+
+class FeedbackSubmitView(APIView):
+    """Any authenticated staff member submits feedback."""
+    permission_classes = [IsAdminOrManagerOrEmployee]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    @extend_schema(
+        summary="Submit feedback",
+        request=FeedbackSubmitSerializer,
+        responses={201: FeedbackSubmitSerializer}
+    )
+    def post(self, request):
+        serializer = FeedbackSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(
+            {'message': 'Feedback submitted successfully.', 'data': serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AdminFeedbackListView(ListAPIView):
+    """Admin/manager lists all submitted feedback."""
+    permission_classes = [IsAdminOrManager]
+    serializer_class = FeedbackListSerializer
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return Feedback.objects.select_related('user').all()
+
+    @extend_schema(summary="List all feedback (admin)")
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminFeedbackDetailView(RetrieveAPIView):
+    """Admin/manager retrieves a single feedback entry."""
+    permission_classes = [IsAdminOrManager]
+    serializer_class = FeedbackDetailSerializer
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return Feedback.objects.select_related('user').all()
+
+    @extend_schema(summary="Retrieve feedback detail (admin)")
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminFeedbackDeleteView(APIView):
+    """Admin deletes a feedback entry."""
+    permission_classes = [IsAdmin]
+
+    @extend_schema(summary="Delete feedback (admin)", responses={204: None})
+    def delete(self, request, id):
+        feedback = get_object_or_404(Feedback, id=id)
+        feedback.delete()
+        return Response({'message': 'Feedback deleted.'}, status=status.HTTP_204_NO_CONTENT)
+
+
+# ==================== ISSUE REPORT ====================
+
+class IssueReportSubmitView(APIView):
+    """Any authenticated staff member submits an issue report."""
+    permission_classes = [IsAdminOrManagerOrEmployee]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(
+        summary="Submit issue report",
+        request=IssueReportSubmitSerializer,
+        responses={201: IssueReportSubmitSerializer}
+    )
+    def post(self, request):
+        serializer = IssueReportSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(
+            {'message': 'Issue report submitted successfully.', 'data': serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AdminIssueReportListView(ListAPIView):
+    """Admin/manager lists all submitted issue reports."""
+    permission_classes = [IsAdminOrManager]
+    serializer_class = IssueReportListSerializer
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return IssueReport.objects.select_related('user').all()
+
+    @extend_schema(summary="List all issue reports (admin)")
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminIssueReportDetailView(RetrieveAPIView):
+    """Admin/manager retrieves a single issue report."""
+    permission_classes = [IsAdminOrManager]
+    serializer_class = IssueReportDetailSerializer
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return IssueReport.objects.select_related('user').all()
+
+    @extend_schema(summary="Retrieve issue report detail (admin)")
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminIssueReportDeleteView(APIView):
+    """Admin deletes an issue report."""
+    permission_classes = [IsAdmin]
+
+    @extend_schema(summary="Delete issue report (admin)", responses={204: None})
+    def delete(self, request, id):
+        report = get_object_or_404(IssueReport, id=id)
+        report.delete()
+        return Response({'message': 'Issue report deleted.'}, status=status.HTTP_204_NO_CONTENT)

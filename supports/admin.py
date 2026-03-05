@@ -86,3 +86,25 @@ class TermsAndConditionsAdmin(SingletonAdmin):
 @admin.register(PrivacyPolicy)
 class PrivacyPolicyAdmin(SingletonAdmin):
     pass
+
+
+from django.contrib import admin
+from .models import Feedback, IssueReport
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ['first_name', 'last_name', 'email', 'country', 'language', 'user', 'created_at']
+    list_filter = ['country', 'language']
+    search_fields = ['first_name', 'last_name', 'email', 'user__email']
+    readonly_fields = ['id', 'user', 'created_at', 'updated_at']
+
+
+@admin.register(IssueReport)
+class IssueReportAdmin(admin.ModelAdmin):
+    list_display = ['title', 'user', 'photo_count', 'created_at']
+    search_fields = ['title', 'user__email', 'user__full_name']
+    readonly_fields = [
+        'id', 'user', 'photo_count',
+        'created_at', 'updated_at'
+    ]
