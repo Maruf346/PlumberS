@@ -11,18 +11,16 @@ class InspectionCheckPhotoInline(admin.TabularInline):
 class InspectionCheckItemInline(admin.TabularInline):
     model = InspectionCheckItem
     extra = 0
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at']
+    inlines = []
 
 
 @admin.register(VehicleInspection)
 class VehicleInspectionAdmin(admin.ModelAdmin):
-    list_display = [
-        'vehicle', 'inspected_by', 'status',
-        'has_open_issue', 'started_at', 'submitted_at'
-    ]
-    list_filter = ['status', 'has_open_issue']
+    list_display = ['vehicle', 'inspected_by', 'has_open_issue', 'inspected_at']
+    list_filter = ['has_open_issue']
     search_fields = ['vehicle__name', 'vehicle__plate', 'inspected_by__full_name']
-    readonly_fields = ['id', 'started_at', 'submitted_at', 'updated_at']
+    readonly_fields = ['id', 'has_open_issue', 'inspected_at', 'updated_at']
     inlines = [InspectionCheckItemInline]
 
 
@@ -30,5 +28,4 @@ class VehicleInspectionAdmin(admin.ModelAdmin):
 class InspectionCheckItemAdmin(admin.ModelAdmin):
     list_display = ['inspection', 'category', 'is_ok', 'created_at']
     list_filter = ['category', 'is_ok']
-    search_fields = ['inspection__vehicle__name']
     inlines = [InspectionCheckPhotoInline]

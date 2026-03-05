@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'clients',
     'safety_forms',
     'fleets',
+    'fleet_inspections',
     'jobs',
 ]
 

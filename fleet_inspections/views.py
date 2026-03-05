@@ -1,308 +1,155 @@
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+import json
 
 from .models import *
 from .serializers import *
-from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
+from user.permissions import IsAdminOrManager, IsAdminOrManagerOrEmployee
 
 
-def _get_vehicle_or_403(vehicle_id, employee):
+def _check_vehicle_permission(vehicle, user):
     """
-    Validates that the employee has an active job (PENDING or IN_PROGRESS)
-    with the given vehicle. Returns the Vehicle instance or raises a
-    clear error response dict.
+    Employees must have an active job (PENDING or IN_PROGRESS)
+    with this vehicle. Admins and managers bypass this check.
+    Returns (allowed: bool, error_response or None)
     """
-    from fleets.models import Vehicle
+    if user.is_superuser or user.is_staff:
+        return True, None
+
     from jobs.models import Job, JobStatus
-
-    vehicle = get_object_or_404(Vehicle, id=vehicle_id, is_active=True)
-
-    # Admin and managers bypass the job assignment check
-    if employee.is_superuser or employee.is_staff:
-        return vehicle, None
-
     has_active_job = Job.objects.filter(
-        assigned_to=employee,
+        assigned_to=user,
         vehicle=vehicle,
         status__in=[JobStatus.PENDING, JobStatus.IN_PROGRESS]
     ).exists()
 
     if not has_active_job:
-        return None, Response(
+        return False, Response(
             {
                 'error': 'You are not authorized to inspect this vehicle. '
                          'You must have an active job assigned with this vehicle.'
             },
             status=status.HTTP_403_FORBIDDEN
         )
+    return True, None
 
-    return vehicle, None
 
-
-# ==================== START / RESUME INSPECTION ====================
-
-class StartOrResumeInspectionView(APIView):
+class SubmitInspectionView(APIView):
     """
-    POST — Employee starts a new inspection or resumes their existing draft.
-    Only one DRAFT per employee per vehicle is allowed at a time.
-    If a DRAFT already exists, it is returned instead of creating a new one.
-    """
-    permission_classes = [IsAdminOrManagerOrEmployee]
+    Single endpoint — employee submits the full inspection at once.
 
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Start or resume vehicle inspection",
-        request=InspectionStartSerializer,
-        responses={200: VehicleInspectionDetailSerializer}
-    )
-    def post(self, request):
-        serializer = InspectionStartSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    Multipart form data structure:
+        notes: "optional overall notes"
+        items: JSON string of checklist items —
+               [
+                 {"category": "lights", "is_ok": true},
+                 {"category": "tires", "is_ok": false, "issue_detail": "worn out"},
+                 ...
+               ]
+        photos_tires_0: <image file>
+        photos_tires_1: <image file>
+        photos_lights_0: <image file>
 
-        vehicle_id = serializer.validated_data['vehicle_id']
-        vehicle, error = _get_vehicle_or_403(vehicle_id, request.user)
-        if error:
-            return error
-
-        # Check for existing draft
-        existing_draft = VehicleInspection.objects.filter(
-            vehicle=vehicle,
-            inspected_by=request.user,
-            status=InspectionStatus.DRAFT
-        ).first()
-
-        if existing_draft:
-            return Response(
-                {
-                    'message': 'Resuming existing draft inspection.',
-                    'data': VehicleInspectionDetailSerializer(existing_draft).data
-                },
-                status=status.HTTP_200_OK
-            )
-
-        # Create new draft
-        inspection = VehicleInspection.objects.create(
-            vehicle=vehicle,
-            inspected_by=request.user,
-            status=InspectionStatus.DRAFT
-        )
-        return Response(
-            {
-                'message': 'Inspection started.',
-                'data': VehicleInspectionDetailSerializer(inspection).data
-            },
-            status=status.HTTP_201_CREATED
-        )
-
-
-# ==================== CHECK ITEM SAVE / UPDATE ====================
-
-class SaveCheckItemView(APIView):
-    """
-    POST — Employee saves or updates a single checklist item on a draft inspection.
-    If the category already exists on this inspection, it is updated.
-    If not, it is created.
-    This is the endpoint hit when employee toggles Yes/No and saves a row.
-    """
-    permission_classes = [IsAdminOrManagerOrEmployee]
-
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Save or update a checklist item",
-        request=InspectionCheckItemWriteSerializer,
-        responses={200: InspectionCheckItemSerializer}
-    )
-    def post(self, request, inspection_id):
-        inspection = get_object_or_404(
-            VehicleInspection,
-            id=inspection_id,
-            status=InspectionStatus.DRAFT
-        )
-
-        # Only the inspector or admin/manager can modify
-        if not (request.user.is_staff or request.user.is_superuser):
-            if inspection.inspected_by != request.user:
-                return Response(
-                    {'error': 'You can only modify your own inspection.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-        # Upsert — update if category exists, create if not
-        existing = InspectionCheckItem.objects.filter(
-            inspection=inspection,
-            category=request.data.get('category')
-        ).first()
-
-        serializer = InspectionCheckItemWriteSerializer(
-            existing,
-            data=request.data,
-            partial=bool(existing)
-        )
-        serializer.is_valid(raise_exception=True)
-
-        if existing:
-            item = serializer.save()
-            msg = 'Check item updated.'
-        else:
-            item = serializer.save(inspection=inspection)
-            msg = 'Check item saved.'
-
-        return Response(
-            {
-                'message': msg,
-                'data': InspectionCheckItemSerializer(item).data
-            },
-            status=status.HTTP_200_OK
-        )
-
-
-# ==================== PHOTO UPLOAD / DELETE ====================
-
-class CheckItemPhotoUploadView(APIView):
-    """
-    Employee uploads one or more photos to a specific check item.
-    Only allowed on DRAFT inspections.
-    Only relevant when check item is_ok=False.
+    Photo key convention: photos_<category>_<index>
+    e.g. photos_tires_0, photos_tires_1, photos_body_exterior_0
     """
     permission_classes = [IsAdminOrManagerOrEmployee]
     parser_classes = [MultiPartParser, FormParser]
 
     @extend_schema(
         tags=['fleet-inspections'],
-        summary="Upload photos to a check item",
+        summary="Submit vehicle inspection",
+        description=(
+            "Submit a full vehicle inspection in one multipart call. "
+            "Send 'items' as a JSON string and photos keyed as "
+            "'photos_<category>_<index>' e.g. 'photos_tires_0'."
+        ),
     )
-    def post(self, request, inspection_id, check_item_id):
-        inspection = get_object_or_404(
-            VehicleInspection,
-            id=inspection_id,
-            status=InspectionStatus.DRAFT
-        )
+    def post(self, request, vehicle_id):
+        from fleets.models import Vehicle
+        vehicle = get_object_or_404(Vehicle, id=vehicle_id, is_active=True)
 
-        if not (request.user.is_staff or request.user.is_superuser):
-            if inspection.inspected_by != request.user:
-                return Response(
-                    {'error': 'You can only modify your own inspection.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        # Permission check
+        allowed, error = _check_vehicle_permission(vehicle, request.user)
+        if not allowed:
+            return error
 
-        check_item = get_object_or_404(
-            InspectionCheckItem,
-            id=check_item_id,
-            inspection=inspection
-        )
-
-        photos = request.FILES.getlist('photos')
-        if not photos:
+        # Parse items — frontend sends as JSON string in multipart
+        raw_items = request.data.get('items')
+        if not raw_items:
             return Response(
-                {'error': 'No photos provided.'},
+                {'error': 'items field is required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        created = []
-        for photo in photos:
-            caption = request.data.get('caption', '')
-            obj = InspectionCheckPhoto.objects.create(
-                check_item=check_item,
-                photo=photo,
-                caption=caption
+        try:
+            items_data = json.loads(raw_items)
+        except (json.JSONDecodeError, TypeError):
+            return Response(
+                {'error': 'items must be a valid JSON string.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            created.append(InspectionCheckPhotoSerializer(obj).data)
 
-        return Response(
-            {'message': f'{len(created)} photo(s) uploaded.', 'data': created},
-            status=status.HTTP_201_CREATED
-        )
+        payload = {
+            'notes': request.data.get('notes', ''),
+            'items': items_data
+        }
 
-
-class CheckItemPhotoDeleteView(APIView):
-    """Delete a specific photo from a check item. Draft only."""
-    permission_classes = [IsAdminOrManagerOrEmployee]
-
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Delete a check item photo",
-        responses={204: None}
-    )
-    def delete(self, request, inspection_id, check_item_id, photo_id):
-        inspection = get_object_or_404(
-            VehicleInspection,
-            id=inspection_id,
-            status=InspectionStatus.DRAFT
-        )
-
-        if not (request.user.is_staff or request.user.is_superuser):
-            if inspection.inspected_by != request.user:
-                return Response(
-                    {'error': 'You can only modify your own inspection.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-        photo = get_object_or_404(
-            InspectionCheckPhoto,
-            id=photo_id,
-            check_item__id=check_item_id,
-            check_item__inspection=inspection
-        )
-        photo.delete()
-        return Response({'message': 'Photo deleted.'}, status=status.HTTP_204_NO_CONTENT)
-
-
-# ==================== SUBMIT INSPECTION ====================
-
-class SubmitInspectionView(APIView):
-    """
-    Employee submits the inspection — DRAFT → SUBMITTED.
-    On submit:
-    1. has_open_issue is computed from check items.
-    2. submitted_at is set.
-    3. Vehicle.update_status() is called to reflect new inspection state.
-    """
-    permission_classes = [IsAdminOrManagerOrEmployee]
-
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Submit inspection",
-        request=InspectionSubmitSerializer,
-        responses={200: VehicleInspectionDetailSerializer}
-    )
-    def post(self, request, inspection_id):
-        inspection = get_object_or_404(
-            VehicleInspection,
-            id=inspection_id,
-            status=InspectionStatus.DRAFT
-        )
-
-        if not (request.user.is_staff or request.user.is_superuser):
-            if inspection.inspected_by != request.user:
-                return Response(
-                    {'error': 'You can only submit your own inspection.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-        serializer = InspectionSubmitSerializer(
-            data=request.data,
-            context={'inspection': inspection}
-        )
+        serializer = InspectionSubmitSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
 
-        # Compute has_open_issue
-        has_issue = inspection.check_items.filter(is_ok=False).exists()
+        # Create inspection record
+        inspection = VehicleInspection.objects.create(
+            vehicle=vehicle,
+            inspected_by=request.user,
+            notes=validated.get('notes', ''),
+            has_open_issue=False  # computed below
+        )
 
-        # Finalize inspection
+        has_issue = False
+
+        for item_data in validated['items']:
+            category = item_data['category']
+            is_ok = item_data['is_ok']
+            issue_detail = item_data.get('issue_detail', '')
+
+            if not is_ok:
+                has_issue = True
+
+            check_item = InspectionCheckItem.objects.create(
+                inspection=inspection,
+                category=category,
+                is_ok=is_ok,
+                issue_detail=issue_detail
+            )
+
+            # Collect photos for this category
+            # Key convention: photos_<category>_<index>
+            index = 0
+            while True:
+                photo_key = f'photos_{category}_{index}'
+                photo_file = request.FILES.get(photo_key)
+                if not photo_file:
+                    break
+                InspectionCheckPhoto.objects.create(
+                    check_item=check_item,
+                    photo=photo_file,
+                    caption=request.data.get(f'captions_{category}_{index}', '')
+                )
+                index += 1
+
+        # Save computed has_open_issue
         inspection.has_open_issue = has_issue
-        inspection.status = InspectionStatus.SUBMITTED
-        inspection.submitted_at = timezone.now()
-        inspection.notes = serializer.validated_data.get('notes', inspection.notes)
         inspection.save()
 
         # Auto-update vehicle status
-        inspection.vehicle.update_status()
+        vehicle.update_status()
 
         return Response(
             {
@@ -310,112 +157,59 @@ class SubmitInspectionView(APIView):
                 'has_open_issue': has_issue,
                 'data': VehicleInspectionDetailSerializer(inspection).data
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_201_CREATED
         )
 
 
-# ==================== INSPECTION HISTORY ====================
+# ==================== HISTORY VIEWS ====================
 
 class VehicleInspectionHistoryView(ListAPIView):
-    """
-    All authenticated staff can view inspection history for a specific vehicle.
-    Ordered by most recent first.
-    Only SUBMITTED inspections appear in history.
-    """
+    """All authenticated staff — inspection history for a specific vehicle."""
     permission_classes = [IsAdminOrManagerOrEmployee]
     serializer_class = VehicleInspectionListSerializer
 
     def get_queryset(self):
-        vehicle_id = self.kwargs['vehicle_id']
         return VehicleInspection.objects.filter(
-            vehicle__id=vehicle_id,
-            status=InspectionStatus.SUBMITTED
-        ).select_related('vehicle', 'inspected_by').order_by('-submitted_at')
+            vehicle__id=self.kwargs['vehicle_id']
+        ).select_related('vehicle', 'inspected_by').order_by('-inspected_at')
 
     @extend_schema(
         tags=['fleet-inspections'],
-        summary="Vehicle inspection history",
-        description="Lists all submitted inspections for a vehicle. Visible to all authenticated staff."
+        summary="Vehicle inspection history"
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
 
-class InspectionHistoryDetailView(RetrieveAPIView):
-    """
-    Full detail of a submitted inspection.
-    All authenticated staff can view.
-    """
+class InspectionDetailView(RetrieveAPIView):
+    """Full detail of a single inspection — all authenticated staff."""
     permission_classes = [IsAdminOrManagerOrEmployee]
     serializer_class = VehicleInspectionDetailSerializer
     lookup_field = 'id'
 
     def get_queryset(self):
-        return VehicleInspection.objects.filter(
-            status=InspectionStatus.SUBMITTED
-        ).select_related('vehicle', 'inspected_by').prefetch_related(
-            'check_items__photos'
-        )
+        return VehicleInspection.objects.select_related(
+            'vehicle', 'inspected_by'
+        ).prefetch_related('check_items__photos')
 
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Inspection history detail",
-    )
+    @extend_schema(tags=['fleet-inspections'], summary="Inspection detail")
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
 
-class MyDraftInspectionView(RetrieveAPIView):
-    """
-    Employee retrieves their current DRAFT inspection for a vehicle.
-    Used when resuming — mobile app calls this on entering the inspection screen.
-    """
-    permission_classes = [IsAdminOrManagerOrEmployee]
-    serializer_class = VehicleInspectionDetailSerializer
-
-    @extend_schema(
-        tags=['fleet-inspections'],
-        summary="Get my current draft inspection for a vehicle",
-    )
-    def get(self, request, vehicle_id):
-        inspection = VehicleInspection.objects.filter(
-            vehicle__id=vehicle_id,
-            inspected_by=request.user,
-            status=InspectionStatus.DRAFT
-        ).prefetch_related('check_items__photos').first()
-
-        if not inspection:
-            return Response(
-                {'message': 'No active draft inspection for this vehicle.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            VehicleInspectionDetailSerializer(inspection).data,
-            status=status.HTTP_200_OK
-        )
-
-
 class AllInspectionsListView(ListAPIView):
-    """
-    Admin/manager views all inspections across all vehicles.
-    Supports filtering by vehicle, status, inspector.
-    """
+    """Admin/manager — all inspections across all vehicles with filters."""
     permission_classes = [IsAdminOrManager]
     serializer_class = VehicleInspectionListSerializer
 
     def get_queryset(self):
         qs = VehicleInspection.objects.select_related(
             'vehicle', 'inspected_by'
-        ).order_by('-started_at')
+        ).order_by('-inspected_at')
 
         vehicle = self.request.query_params.get('vehicle')
         if vehicle:
             qs = qs.filter(vehicle__id=vehicle)
-
-        insp_status = self.request.query_params.get('status')
-        if insp_status:
-            qs = qs.filter(status=insp_status)
 
         inspector = self.request.query_params.get('inspector')
         if inspector:
@@ -434,7 +228,6 @@ class AllInspectionsListView(ListAPIView):
         summary="All inspections (admin/manager)",
         parameters=[
             OpenApiParameter('vehicle', str, description='Filter by vehicle UUID'),
-            OpenApiParameter('status', str, description='draft | submitted'),
             OpenApiParameter('inspector', str, description='Filter by employee UUID'),
             OpenApiParameter('has_issue', str, description='true | false'),
         ]
