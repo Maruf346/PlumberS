@@ -317,19 +317,22 @@ class JobStatusUpdateSerializer(serializers.ModelSerializer):
     def validate_status(self, value):
         instance = self.instance
         user = self.context['request'].user
+
         allowed_transitions = {
             JobStatus.PENDING: [JobStatus.IN_PROGRESS],
             JobStatus.IN_PROGRESS: [JobStatus.COMPLETED],
-            JobStatus.OVERDUE: [JobStatus.IN_PROGRESS],
+            JobStatus.OVERDUE: [JobStatus.COMPLETED],  # can only complete, not restart
         }
+
         allowed = allowed_transitions.get(instance.status, [])
         if value not in allowed:
             raise serializers.ValidationError(
                 f'Cannot transition from "{instance.status}" to "{value}".'
             )
-        # Only assigned employee or admin can change status
+
         if not user.is_superuser and instance.assigned_to != user:
             raise serializers.ValidationError('You are not assigned to this job.')
+
         return value
 
     def update(self, instance, validated_data):

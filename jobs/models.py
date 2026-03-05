@@ -170,7 +170,7 @@ class Job(models.Model):
         if (
             self.scheduled_datetime and
             timezone.now() > self.scheduled_datetime and
-            self.status not in [JobStatus.COMPLETED]
+            self.status not in [JobStatus.COMPLETED]  # COMPLETED is the only exempt status
         ):
             self.status = JobStatus.OVERDUE
             Job.objects.filter(pk=self.pk).update(status=JobStatus.OVERDUE)

@@ -23,25 +23,8 @@ def debug_task(self):
 
 # Celery Beat Schedule
 app.conf.beat_schedule = {
-    # 'send-maintenance-reminders-daily': {
-    #     'task': 'notifications.tasks.send_maintenance_due_reminders',
-    #     'schedule': crontab(hour=9, minute=0),  # Every day at 9 AM
-    # },
-    # 'send-subscription-reminders-daily': {
-    #     'task': 'notifications.tasks.send_subscription_expiry_reminders',
-    #     'schedule': crontab(hour=10, minute=0),  # Every day at 10 AM
-    # },
-    # 'check-milestones-hourly': {
-    #     'task': 'notifications.tasks.check_milestones',
-    #     'schedule': crontab(minute=0),  # Every hour
-    # },
-    
-    #  'check-expired-subscriptions-daily': {
-    #     'task': 'subscriptions.tasks.check_expired_subscriptions',
-    #     'schedule': crontab(hour=0, minute=30),  # Every day at 12:30 AM
-    # },
-    # 'send-subscription-expiry-reminders-daily': {
-    #     'task': 'subscriptions.tasks.send_subscription_expiry_reminders',
-    #     'schedule': crontab(hour=9, minute=0),  # Every day at 9 AM
-    # },
+    'mark-overdue-jobs': {
+        'task': 'jobs.tasks.mark_overdue_jobs',
+        'schedule': crontab(minute='*/30'),
+    },
 }

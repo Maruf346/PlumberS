@@ -39,11 +39,12 @@ class JobDashboardView(APIView):
         jobs = Job.objects.all()
 
         # Mark overdue
-        for job in jobs.filter(
-            scheduled_datetime__lt=timezone.now()
-        ).exclude(status=JobStatus.COMPLETED):
-            job.check_overdue()
-
+        # for job in jobs.filter(
+        #     scheduled_datetime__lt=timezone.now()
+        # ).exclude(status=JobStatus.COMPLETED):
+        #     job.check_overdue()
+        # Celery beat handles overdue marking — no need to loop here
+        
         jobs = Job.objects.all()  # re-query after updates
 
         active = jobs.filter(status=JobStatus.IN_PROGRESS).count()
