@@ -678,12 +678,13 @@ class AdminCreateManagerSerializer(serializers.Serializer):
     
     first_name = serializers.CharField(max_length=50)
     last_name = serializers.CharField(max_length=50)
+    profile_picture = serializers.ImageField(required=False)
     email = serializers.EmailField()
     phone = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(min_length=8, write_only=True)
     confirm_password = serializers.CharField(min_length=8, write_only=True)
-    department = serializers.CharField(required=False, allow_blank=True)
-    notes = serializers.CharField(required=False, allow_blank=True)
+    # department = serializers.CharField(required=False, allow_blank=True)
+    # notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate_email(self, value):
         value = value.lower().strip()
@@ -698,21 +699,26 @@ class AdminCreateManagerSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         validated_data.pop('confirm_password')
-        department = validated_data.pop('department', '')
-        notes = validated_data.pop('notes', '')
+        # department = validated_data.pop('department', '')
+        # notes = validated_data.pop('notes', '')
         first_name = validated_data.pop('first_name')
         last_name = validated_data.pop('last_name')
+        profile_picture = validated_data.pop('profile_picture', None)
+        email = validated_data.pop('email')
+        password = validated_data.pop('password')
+        phone = validated_data.pop('phone', '')
 
         user = User.objects.create_user(
-            email=validated_data['email'],
-            password=validated_data['password'],
+            email=email,
+            password=password,
             full_name=f"{first_name} {last_name}",
-            phone=validated_data.get('phone', ''),
-            is_staff=True,       # manager
+            profile_picture=profile_picture,
+            phone=phone,
+            is_staff=True,
             is_superuser=False,
             is_active=True,
         )
-        ManagerProfile.objects.create(user=user, department=department, notes=notes)
+        ManagerProfile.objects.create(user=user)
         # UserSettings.objects.create(user=user)
         return user
 

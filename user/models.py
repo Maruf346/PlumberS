@@ -188,7 +188,7 @@ class ManagerProfile(models.Model):
         on_delete=models.CASCADE,
         related_name='manager_profile'
     )
-    department = models.CharField(max_length=100, blank=True)
+    # department = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

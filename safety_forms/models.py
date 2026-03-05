@@ -12,7 +12,7 @@ class FieldType(models.TextChoices):
     DATE = 'date', 'Date'                        # date picker
     TIME = 'time', 'Time'                        # time picker
     FILE = 'file', 'File Upload'                 # file/image upload
-    SIGNATURE = 'signature', 'Signature'         # signature pad (mobile)
+    # SIGNATURE = 'signature', 'Signature'         # signature pad (mobile)
 
 
 class SafetyFormTemplate(models.Model):

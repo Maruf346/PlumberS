@@ -113,7 +113,7 @@ class AdminJobListView(ListAPIView):
         if search:
             qs = qs.filter(
                 Q(job_id__icontains=search) |
-                Q(insured_name__icontains=search) |
+                Q(job_name__icontains=search) |
                 Q(client__name__icontains=search)
             )
 
@@ -149,6 +149,7 @@ class AdminJobDetailView(RetrieveAPIView):
 class AdminJobCreateView(APIView):
     """Admin creates a new job."""
     permission_classes = [IsAdmin]
+    serializer_class = JobWriteSerializer
 
     @extend_schema(
         tags=['jobs'],
@@ -157,7 +158,7 @@ class AdminJobCreateView(APIView):
         responses={201: JobDetailSerializer}
     )
     def post(self, request):
-        serializer = JobWriteSerializer(data=request.data, context={'request': request})
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
         _log_activity(job, ActivityType.JOB_CREATED, request.user, "Job created")

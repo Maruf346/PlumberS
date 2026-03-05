@@ -73,8 +73,8 @@ class Job(models.Model):
     )
 
     # Core details
+    job_name = models.CharField(max_length=200, blank=True)
     job_details = models.TextField(blank=True)
-    insured_name = models.CharField(max_length=200, blank=True)
 
     # Scheduling
     scheduled_datetime = models.DateTimeField(
@@ -146,13 +146,12 @@ class Job(models.Model):
 
     @staticmethod
     def _generate_job_id():
-        """
-        Generates sequential job ID like JB-1001.
-        Finds the highest existing numeric suffix and increments.
-        """
+        from django.db.models.functions import Cast, Substr
+        from django.db.models import IntegerField
+
         last = Job.objects.filter(
             job_id__startswith='JB-'
-        ).order_by('-created_at').first()
+        ).order_by('-id').first()  # UUID ordering is fine for "latest created"
 
         if last:
             try:

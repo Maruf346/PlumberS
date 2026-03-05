@@ -104,8 +104,9 @@ class JobListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
         fields = [
-            'id', 'job_id', 'status', 'priority',
-            'insured_name', 'scheduled_datetime',
+            'id', 'job_id', 'status', 'priority', 'job_name',
+            # 'insured_name',  # Commented out as it's not used
+            'scheduled_datetime',
             'client', 'client_name', 'client_address',
             'assigned_to', 'is_overdue', 'has_fleet_issue',
             'safety_form_count', 'task_count', 'completed_task_count',
@@ -142,8 +143,8 @@ class JobDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
         fields = [
-            'id', 'job_id', 'status', 'priority',
-            'job_details', 'insured_name',
+            'id', 'job_id', 'status', 'priority', 'job_name',
+            'job_details', # 'insured_name',
             'scheduled_datetime',
             'client', 'assigned_to', 'assigned_managers',
             'vehicle', 'safety_forms', 'report_template_ids',
@@ -183,7 +184,8 @@ class JobWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
         fields = [
-            'job_details', 'insured_name', 'priority',
+            'job_name', 'job_details', # 'insured_name',
+            'priority',
             'scheduled_datetime', 'report_template_ids',
             'client_id', 'assigned_to_id', 'assigned_manager_ids',
             'vehicle_id', 'safety_form_ids',
@@ -206,7 +208,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
                 user = User.objects.get(id=uid)
             except User.DoesNotExist:
                 raise serializers.ValidationError(f'Manager {uid} not found.')
-            if not user.is_staff or user.is_superuser:
+            if not (user.is_staff and not user.is_superuser):
                 raise serializers.ValidationError(f'User {uid} is not a manager.')
         return value
 
@@ -247,8 +249,8 @@ class JobWriteSerializer(serializers.ModelSerializer):
         if assigned_to_id != 'UNCHANGED':
             job.assigned_to = User.objects.get(id=assigned_to_id) if assigned_to_id else None
             # Auto-set status to pending if unassigned, keep in_progress if already started
-            if not assigned_to_id and job.status == JobStatus.PENDING:
-                job.status = JobStatus.PENDING
+            # if not assigned_to_id and job.status == JobStatus.PENDING:
+            #     job.status = JobStatus.PENDING
 
         if vehicle_id != 'UNCHANGED':
             job.vehicle = Vehicle.objects.get(id=vehicle_id) if vehicle_id else None
@@ -279,7 +281,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
         return self._set_relations(job, validated_data)
 
     def update(self, instance, validated_data):
-        for attr in ['job_details', 'insured_name', 'priority', 'scheduled_datetime', 'report_template_ids']:
+        for attr in ['job_name', 'job_details', 'priority', 'scheduled_datetime', 'report_template_ids']:
             if attr in validated_data:
                 setattr(instance, attr, validated_data.pop(attr))
         return self._set_relations(instance, validated_data)
