@@ -5,7 +5,7 @@ from .models import *
 class InspectionCheckPhotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = InspectionCheckPhoto
-        fields = ['id', 'photo', 'caption', 'uploaded_at']
+        fields = ['id', 'photo', 'uploaded_at']
         read_only_fields = ['id', 'uploaded_at']
 
 

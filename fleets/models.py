@@ -100,16 +100,12 @@ class Vehicle(models.Model):
         Highest priority condition wins.
         """
         from django.utils import timezone
-        from datetime import timedelta
 
         new_status = VehicleStatus.HEALTHY
 
-        # Only submitted inspections count for history
-        submitted = self.inspections.filter(status='submitted')
-
         # Priority 3 — inspection due
-        last = submitted.order_by('-submitted_at').first()
-        last_date = last.submitted_at if last else None
+        last = self.inspections.order_by('-inspected_at').first()
+        last_date = last.inspected_at if last else None
         if last_date is None or (timezone.now() - last_date).days > 7:
             new_status = VehicleStatus.INSPECTION_DUE
 
@@ -121,8 +117,8 @@ class Vehicle(models.Model):
         ):
             new_status = VehicleStatus.SERVICE_OVERDUE
 
-        # Priority 1 — open issue from any submitted inspection
-        if submitted.filter(has_open_issue=True).exists():
+        # Priority 1 — open issue
+        if self.inspections.filter(has_open_issue=True).exists():
             new_status = VehicleStatus.ISSUE_REPORTED
 
         self.status = new_status
@@ -130,10 +126,8 @@ class Vehicle(models.Model):
 
     @property
     def last_inspection_date(self):
-        latest = self.inspections.filter(
-            status='submitted'
-        ).order_by('-submitted_at').first()
-        return latest.submitted_at if latest else None
+        latest = self.inspections.order_by('-inspected_at').first()
+        return latest.inspected_at if latest else None
 
     @property
     def is_service_overdue(self):

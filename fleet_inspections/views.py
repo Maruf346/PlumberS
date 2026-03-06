@@ -4,13 +4,13 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, inline_serializer
 import json
 
 from .models import *
 from .serializers import *
 from user.permissions import IsAdminOrManager, IsAdminOrManagerOrEmployee
-
+from rest_framework import serializers as s
 
 def _check_vehicle_permission(vehicle, user):
     """
@@ -64,11 +64,102 @@ class SubmitInspectionView(APIView):
     @extend_schema(
         tags=['fleet-inspections'],
         summary="Submit vehicle inspection",
-        description=(
-            "Submit a full vehicle inspection in one multipart call. "
-            "Send 'items' as a JSON string and photos keyed as "
-            "'photos_<category>_<index>' e.g. 'photos_tires_0'."
+        description="""
+Submit a full vehicle inspection in one multipart call.
+
+**Field structure:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `notes` | string | No | Overall inspection notes |
+| `items` | string (JSON) | Yes | JSON array of checklist items |
+| `photos_<category>_<index>` | file | No | Photos for issue items |
+| `captions_<category>_<index>` | string | No | Caption for each photo |
+
+**Valid category values:**
+`lights`, `tires`, `brakes`, `fluid_levels`, `mirrors`, `horn`, `windshield_wipers`, `dashboard_warning_lights`, `body_exterior`
+
+**items JSON string example:**
+```json
+[
+  {"category": "lights", "is_ok": true},
+  {"category": "tires", "is_ok": false, "issue_detail": "Front tire worn out"},
+  {"category": "brakes", "is_ok": true}
+]
+```
+
+**Photo key convention:**
+- `photos_tires_0` → first photo for tires
+- `photos_tires_1` → second photo for tires
+- `photos_body_exterior_0` → first photo for body exterior
+
+**Full example with photos:**
+```
+notes: "Checked all items"
+items: [{"category":"tires","is_ok":false,"issue_detail":"Worn"},{"category":"lights","is_ok":true}]
+photos_tires_0: <image file>
+photos_tires_1: <image file>
+captions_tires_0: "Close up of front tire"
+```
+        """,
+        request=inline_serializer(
+            name='InspectionSubmitRequest',
+            fields={
+                'notes': s.CharField(
+                    required=False,
+                    help_text='Optional overall inspection notes'
+                ),
+                'items': s.CharField(
+                    required=True,
+                    help_text=(
+                        'JSON string array of checklist items. '
+                        'Example: [{"category":"lights","is_ok":true},'
+                        '{"category":"tires","is_ok":false,"issue_detail":"worn"}]'
+                    )
+                ),
+                'photos_lights_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for lights item (index 0). Pattern: photos_<category>_<index>'
+                ),
+                'photos_tires_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for tires item (index 0)'
+                ),
+                'photos_brakes_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for brakes item (index 0)'
+                ),
+                'photos_fluid_levels_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for fluid levels item (index 0)'
+                ),
+                'photos_mirrors_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for mirrors item (index 0)'
+                ),
+                'photos_horn_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for horn item (index 0)'
+                ),
+                'photos_windshield_wipers_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for windshield & wipers item (index 0)'
+                ),
+                'photos_dashboard_warning_lights_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for dashboard warning lights item (index 0)'
+                ),
+                'photos_body_exterior_0': s.ImageField(
+                    required=False,
+                    help_text='Photo for body exterior item (index 0)'
+                ),
+                'captions_tires_0': s.CharField(
+                    required=False,
+                    help_text='Caption for tires photo 0. Pattern: captions_<category>_<index>'
+                ),
+            }
         ),
+        responses={201: VehicleInspectionDetailSerializer}
     )
     def post(self, request, vehicle_id):
         from fleets.models import Vehicle
