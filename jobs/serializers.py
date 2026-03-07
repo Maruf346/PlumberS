@@ -366,3 +366,124 @@ class JobDashboardSerializer(serializers.Serializer):
     overdue_jobs = serializers.IntegerField()
     pending_safety_forms = serializers.IntegerField()
     fleet_issues = serializers.IntegerField()
+    
+    
+# ==================== EMPLOYEE-FACING SERIALIZERS ====================
+
+class JobMinimalSerializer(serializers.ModelSerializer):
+    """
+    Minimal job card — used in list views (today/upcoming/completed,
+    and calendar today/tomorrow/this week).
+    Sorted by scheduled_datetime in the view.
+    """
+    client_address = serializers.CharField(source='client.address', read_only=True)
+    vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+
+    class Meta:
+        model = Job
+        fields = [
+            'id', 'job_id', 'job_name',
+            'client_address', 'scheduled_datetime',
+            'vehicle_name', 'vehicle_plate',
+            'status',
+        ]
+
+
+class JobClientInfoSerializer(serializers.Serializer):
+    """Nested client contact block inside job detail."""
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    phone = serializers.CharField()
+    profile_picture = serializers.ImageField()
+    contact_person_name = serializers.CharField()
+    address = serializers.CharField()
+    maps_url = serializers.CharField()
+
+
+class JobEmployeeInfoSerializer(serializers.Serializer):
+    """Nested assigned employee block inside job detail."""
+    id = serializers.UUIDField()
+    full_name = serializers.CharField()
+    phone = serializers.CharField()
+    email = serializers.EmailField()
+    profile_picture = serializers.ImageField()
+
+
+class EmployeeJobDetailSerializer(serializers.ModelSerializer):
+    """
+    Full job detail for employee-facing detail endpoint.
+    Contains everything the mobile app needs to render the job screen.
+    """
+    client_info = serializers.SerializerMethodField()
+    assigned_employee_info = serializers.SerializerMethodField()
+    vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    attachments = JobAttachmentSerializer(many=True, read_only=True)
+    tasks = JobTaskSerializer(many=True, read_only=True)
+    safety_form_ids = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Job
+        fields = [
+            'id', 'job_id', 'job_name', 'job_details',
+            'status', 'priority', 'scheduled_datetime',
+            'vehicle_name', 'vehicle_plate',
+            'client_info', 'assigned_employee_info',
+            'attachments', 'tasks',
+            'report_template_ids', 'safety_form_ids',
+            'created_at', 'updated_at',
+        ]
+
+    def get_client_info(self, obj):
+        if not obj.client:
+            return None
+        return {
+            'name': obj.client.name,
+            'email': obj.client.email,
+            'phone': obj.client.phone,
+            'profile_picture': self._get_image_url(obj.client.profile_picture),
+            'contact_person_name': obj.client.contact_person_name,
+            'address': obj.client.address,
+            'maps_url': obj.client.maps_url,
+        }
+
+    def get_assigned_employee_info(self, obj):
+        if not obj.assigned_to:
+            return None
+        request = self.context.get('request')
+        pic = obj.assigned_to.profile_picture
+        return {
+            'id': str(obj.assigned_to.id),
+            'full_name': obj.assigned_to.full_name,
+            'phone': str(obj.assigned_to.phone) if obj.assigned_to.phone else None,
+            'email': obj.assigned_to.email,
+            'profile_picture': request.build_absolute_uri(pic.url) if pic and request else None,
+        }
+
+    def get_safety_form_ids(self, obj):
+        return [str(uid) for uid in obj.safety_forms.values_list('id', flat=True)]
+    
+    def _get_image_url(self, image_field):
+        request = self.context.get('request')
+        if image_field and request:
+            return request.build_absolute_uri(image_field.url)
+        return None
+
+
+class EmployeeJobListResponseSerializer(serializers.Serializer):
+    """
+    Response shape for the today/upcoming/completed endpoint.
+    """
+    today = JobMinimalSerializer(many=True)
+    upcoming = JobMinimalSerializer(many=True)
+    completed = JobMinimalSerializer(many=True)
+
+
+class EmployeeCalendarJobsSerializer(serializers.Serializer):
+    """
+    Response shape for the calendar today/tomorrow/this week endpoint.
+    """
+    today = JobMinimalSerializer(many=True)
+    tomorrow = JobMinimalSerializer(many=True)
+    this_week = JobMinimalSerializer(many=True)

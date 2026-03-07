@@ -1,3 +1,4 @@
+from httpx import request
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
@@ -522,3 +523,283 @@ class JobActivityListView(ListAPIView):
     @extend_schema(tags=['jobs'], summary="Job activity timeline")
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+
+from datetime import timedelta, date as date_type
+from django.utils.timezone import make_aware
+from django.utils import timezone
+
+
+# ==================== EMPLOYEE JOB LIST VIEWS ====================
+
+class EmployeeMyJobsView(APIView):
+    """
+    GET — Returns employee's own jobs split into three lists:
+    today, upcoming, completed.
+    Sorted by scheduled_datetime ascending within each group.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="My jobs — today / upcoming / completed",
+        responses={200: EmployeeJobListResponseSerializer}
+    )
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        today = now.date()
+
+        base_qs = Job.objects.filter(
+            assigned_to=user
+        ).select_related(
+            'client', 'vehicle'
+        ).order_by('scheduled_datetime')
+
+        today_jobs = base_qs.filter(
+            scheduled_datetime__date=today
+        ).exclude(status=JobStatus.COMPLETED)
+
+        upcoming_jobs = base_qs.filter(
+            scheduled_datetime__date__gt=today
+        ).exclude(status=JobStatus.COMPLETED)
+
+        completed_jobs = base_qs.filter(
+            status=JobStatus.COMPLETED
+        ).order_by('-scheduled_datetime')
+
+        return Response({
+            'today': JobMinimalSerializer(today_jobs, many=True).data,
+            'upcoming': JobMinimalSerializer(upcoming_jobs, many=True).data,
+            'completed': JobMinimalSerializer(completed_jobs, many=True).data,
+        }, status=status.HTTP_200_OK)
+
+
+class EmployeeCalendarJobsView(APIView):
+    """
+    GET — Returns employee's jobs for calendar view:
+    today, tomorrow, this_week (remaining days after tomorrow).
+    Sorted by scheduled_datetime ascending.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="My jobs — calendar view (today / tomorrow / this week)",
+        responses={200: EmployeeCalendarJobsSerializer}
+    )
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        today = now.date()
+        tomorrow = today + timedelta(days=1)
+
+        # Week starts Monday (weekday()=0) to Sunday (weekday()=6)
+        start_of_week = today - timedelta(days=today.weekday())  # Monday
+        end_of_week = start_of_week + timedelta(days=6)          # Sunday
+
+        base_qs = Job.objects.filter(
+            assigned_to=user
+        ).select_related(
+            'client', 'vehicle'
+        ).order_by('scheduled_datetime')
+
+        today_jobs = base_qs.filter(scheduled_datetime__date=today)
+        tomorrow_jobs = base_qs.filter(scheduled_datetime__date=tomorrow)
+
+        # Build per-day dict for the full week (Mon → Sun)
+        this_week = {}
+        for i in range(7):
+            day = start_of_week + timedelta(days=i)
+            day_name = day.strftime('%A').lower()  # monday, tuesday...
+            day_jobs = base_qs.filter(scheduled_datetime__date=day)
+            this_week[day_name] = JobMinimalSerializer(day_jobs, many=True).data
+
+        return Response({
+            'today': JobMinimalSerializer(today_jobs, many=True).data,
+            'tomorrow': JobMinimalSerializer(tomorrow_jobs, many=True).data,
+            'this_week': this_week,
+        }, status=status.HTTP_200_OK)
+
+
+class EmployeeJobDetailByIdView(RetrieveAPIView):
+    """
+    GET — Full job detail for employee by job UUID.
+    Returns everything needed to render the job detail screen.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+    serializer_class = EmployeeJobDetailSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return Job.objects.all()
+        return Job.objects.filter(assigned_to=user)
+
+    def get_object(self):
+        queryset = self.get_queryset()
+        obj = get_object_or_404(
+            queryset.select_related(
+                'client', 'vehicle', 'assigned_to'
+            ).prefetch_related(
+                'attachments', 'tasks', 'safety_forms'
+            ),
+            id=self.kwargs['id']
+        )
+        return obj
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="Job detail (employee)",
+        description="Full job detail including client info, vehicle, attachments, tasks, safety forms."
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+# ==================== JOB STATUS ACTIONS ====================
+
+class EmployeeStartJobView(APIView):
+    """
+    POST — Employee presses 'Start Job' button.
+    Transitions: PENDING → IN_PROGRESS, OVERDUE stays OVERDUE.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="Start job",
+        responses={200: EmployeeJobDetailSerializer}
+    )
+    def post(self, request, id):
+        job = get_object_or_404(Job, id=id, assigned_to=request.user)
+
+        if job.status == JobStatus.IN_PROGRESS:
+            return Response(
+                {'message': 'Job is already in progress.'},
+                status=status.HTTP_200_OK
+            )
+
+        if job.status == JobStatus.COMPLETED:
+            return Response(
+                {'error': 'Job is already completed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if job.status not in [JobStatus.PENDING, JobStatus.OVERDUE]:
+            return Response(
+                {'error': f'Cannot start a job with status "{job.status}".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Only PENDING transitions to IN_PROGRESS
+        # OVERDUE stays OVERDUE — employee can still work on it
+        if job.status == JobStatus.PENDING:
+            job.status = JobStatus.IN_PROGRESS
+            job.save()
+
+        _log_activity(
+            job, ActivityType.JOB_STARTED,
+            request.user, "Job started by employee"
+        )
+
+        return Response(
+            {
+                'message': 'Job started.',
+                'data': EmployeeJobDetailSerializer(job, context={'request': request}).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class EmployeeCompleteJobView(APIView):
+    """
+    POST — Employee presses 'Complete Job' button.
+    Transitions: IN_PROGRESS → COMPLETED, OVERDUE → COMPLETED.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="Complete job",
+        responses={200: EmployeeJobDetailSerializer}
+    )
+    def post(self, request, id):
+        job = get_object_or_404(Job, id=id, assigned_to=request.user)
+
+        if job.status == JobStatus.COMPLETED:
+            return Response(
+                {'message': 'Job is already completed.'},
+                status=status.HTTP_200_OK
+            )
+
+        if job.status not in [JobStatus.IN_PROGRESS, JobStatus.OVERDUE]:
+            return Response(
+                {'error': f'Cannot complete a job with status "{job.status}". Please start it first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        job.status = JobStatus.COMPLETED
+        job.save()
+
+        _log_activity(
+            job, ActivityType.JOB_COMPLETED,
+            request.user, "Job completed by employee"
+        )
+
+        return Response(
+            {
+                'message': 'Job completed successfully.',
+                'data': EmployeeJobDetailSerializer(job, context={'request': request}).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# ==================== ATTACHMENT DOWNLOAD ====================
+
+class EmployeeJobAttachmentDownloadView(APIView):
+    """
+    GET — Employee downloads a specific attachment from their assigned job.
+    Streams the file directly as a response.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="Download job attachment",
+        description="Download a specific file attachment from an assigned job."
+    )
+    def get(self, request, id, attachment_id):
+        # Employees can only download from their own jobs
+        # Admin/manager can download from any job
+        if request.user.is_superuser or request.user.is_staff:
+            job = get_object_or_404(Job, id=id)
+        else:
+            job = get_object_or_404(Job, id=id, assigned_to=request.user)
+
+        attachment = get_object_or_404(JobAttachment, id=attachment_id, job=job)
+
+        try:
+            file = attachment.file
+            filename = attachment.file_name or file.name.split('/')[-1]
+
+            from django.http import FileResponse
+            response = FileResponse(
+                file.open('rb'),
+                as_attachment=True,
+                filename=filename
+            )
+            return response
+
+        except FileNotFoundError:
+            return Response(
+                {'error': 'File not found on server.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Could not download file: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

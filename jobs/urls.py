@@ -1,34 +1,6 @@
 from django.urls import path
-from .views import (
-    # Dashboard
-    JobDashboardView,
-    # Admin job CRUD
-    AdminJobListView,
-    AdminJobDetailView,
-    AdminJobCreateView,
-    AdminJobUpdateView,
-    JobScheduleView,
-    # Employee job views
-    EmployeeJobListView,
-    EmployeeJobDetailView,
-    JobStatusUpdateView,
-    # Attachments & photos
-    JobAttachmentUploadView,
-    JobAttachmentDeleteView,
-    JobPhotoUploadView,
-    JobPhotoDeleteView,
-    # Line items
-    JobLineItemView,
-    JobLineItemDetailView,
-    # Tasks
-    JobTaskView,
-    JobTaskCompleteView,
-    # Notes
-    JobNoteListView,
-    JobNoteCreateView,
-    # Activity
-    JobActivityListView,
-)
+from .views import *
+
 
 urlpatterns = [
     # Dashboard
@@ -68,4 +40,20 @@ urlpatterns = [
 
     # Activity timeline
     path('<uuid:id>/activity/', JobActivityListView.as_view(), name='job-activity'),
+    
+    
+    # Mobile UI endpoints
+    # Employee job lists
+    path('employee/my-jobs/', EmployeeMyJobsView.as_view(), name='employee-my-jobs'),
+    path('employee/calendar/', EmployeeCalendarJobsView.as_view(), name='employee-calendar-jobs'),
+
+    # Employee job detail
+    path('employee/<uuid:id>/', EmployeeJobDetailByIdView.as_view(), name='employee-job-detail-by-id'),
+
+    # Job actions
+    path('employee/<uuid:id>/start/', EmployeeStartJobView.as_view(), name='employee-job-start'),
+    path('employee/<uuid:id>/complete/', EmployeeCompleteJobView.as_view(), name='employee-job-complete'),
+
+    # Attachment download
+    path('employee/<uuid:id>/attachments/<uuid:attachment_id>/download/', EmployeeJobAttachmentDownloadView.as_view(), name='employee-attachment-download'),
 ]
