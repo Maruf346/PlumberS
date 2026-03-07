@@ -38,7 +38,8 @@ urlpatterns = [
     # Admin user management
     # path('', include(router.urls)),
     # path('total/', TotalUsersCountView.as_view(), name='total-users'),
-    path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
+    # path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
+    path('admin/login/', AdminDashboardLoginView.as_view(), name='admin-dashboard-login'),
     path('admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
     # path('admin/userlist/', UserListView.as_view(), name='admin-user-list'),
     

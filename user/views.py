@@ -481,6 +481,43 @@ class AdminLoginView(APIView):
         )
 
 
+@extend_schema(
+    tags=['admin'],
+    summary="Admin / Manager dashboard login",
+    description="Unified login for admin and manager roles. Returns JWT tokens and user role.",
+    request=AdminDashboardLoginSerializer,
+)
+class AdminDashboardLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = AdminDashboardLoginSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'message': f'Welcome back, {user.full_name}.',
+            'user': {
+                'id': str(user.id),
+                'full_name': user.full_name,
+                'email': user.email,
+                'phone': str(user.phone) if user.phone else None,
+                'profile_picture': request.build_absolute_uri(user.profile_picture.url)
+                                   if user.profile_picture else None,
+                'role': user.role,  # 'admin' or 'manager' from your User.role property
+            },
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_200_OK)
+
+
 @extend_schema_view(
     get=extend_schema(
         tags=["admin"],
