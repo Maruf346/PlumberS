@@ -24,3 +24,20 @@ class SafetyFormFieldAdmin(admin.ModelAdmin):
     list_filter = ['field_type', 'is_required', 'template']
     search_fields = ['label', 'template__name']
     ordering = ['template', 'order']
+    
+
+from .models import SafetyFormSubmission, SafetyFormResponse
+
+class SafetyFormResponseInline(admin.TabularInline):
+    model = SafetyFormResponse
+    extra = 0
+    readonly_fields = ['field', 'value', 'file']
+    can_delete = False
+
+@admin.register(SafetyFormSubmission)
+class SafetyFormSubmissionAdmin(admin.ModelAdmin):
+    list_display = ['template', 'job', 'employee', 'submitted_at']
+    list_filter = ['template']
+    search_fields = ['job__job_id', 'employee__full_name', 'template__name']
+    readonly_fields = ['id', 'job', 'template', 'employee', 'submitted_at']
+    inlines = [SafetyFormResponseInline]

@@ -1,5 +1,6 @@
 from django.db import models
 import uuid
+from django.conf import settings
 
 
 class FieldType(models.TextChoices):
@@ -104,3 +105,76 @@ class SafetyFormField(models.Model):
         ordering = ['order', 'created_at']
         # Enforce unique ordering per template
         unique_together = [['template', 'order']]
+        
+        
+class SafetyFormSubmission(models.Model):
+    """
+    One submission per employee per form per job.
+    Once submitted, it is locked — no updates allowed.
+    Enforced via unique_together and view-level check.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey(
+        'jobs.Job',
+        on_delete=models.CASCADE,
+        related_name='safety_form_submissions'
+    )
+    template = models.ForeignKey(
+        SafetyFormTemplate,
+        on_delete=models.CASCADE,
+        related_name='submissions'
+    )
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='safety_form_submissions'
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.template.name} — {self.job.job_id} — {self.employee}"
+
+    class Meta:
+        verbose_name = 'Safety Form Submission'
+        verbose_name_plural = 'Safety Form Submissions'
+        # One submission per employee per form per job — locked after submit
+        unique_together = [['job', 'template', 'employee']]
+        ordering = ['-submitted_at']
+
+
+class SafetyFormResponse(models.Model):
+    """
+    One response per field per submission.
+    value stores the answer as a string for all field types.
+    For FILE fields, value stores the relative media path after saving.
+    For CHECKBOX, value is 'true' or 'false'.
+    For MULTI_SELECT, value is comma-separated selected options.
+    For DATE/TIME, value is ISO string.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(
+        SafetyFormSubmission,
+        on_delete=models.CASCADE,
+        related_name='responses'
+    )
+    field = models.ForeignKey(
+        SafetyFormField,
+        on_delete=models.CASCADE,
+        related_name='responses'
+    )
+    value = models.TextField(blank=True)
+    # For FILE type fields — actual file stored here
+    file = models.FileField(
+        upload_to='safety_forms/uploads/',
+        null=True,
+        blank=True
+    )
+
+    def __str__(self):
+        return f"{self.field.label}: {self.value or '[file]'}"
+
+    class Meta:
+        verbose_name = 'Safety Form Response'
+        verbose_name_plural = 'Safety Form Responses'
+        unique_together = [['submission', 'field']]

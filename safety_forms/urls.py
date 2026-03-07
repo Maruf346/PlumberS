@@ -1,18 +1,7 @@
 from django.urls import path
-from .views import (
-    # Template — shared
-    SafetyFormTemplateListView,
-    SafetyFormTemplateDetailView,
-    # Template — admin
-    AdminSafetyFormTemplateCreateView,
-    AdminSafetyFormTemplateUpdateView,
-    # Fields — admin
-    AdminFieldCreateView,
-    AdminFieldUpdateView,
-    AdminFieldReorderView,
-    # Utility
-    FieldTypeListView,
-)
+from .views import *
+
+
 
 urlpatterns = [
     # Utility
@@ -30,4 +19,18 @@ urlpatterns = [
     path('<uuid:template_id>/fields/add/', AdminFieldCreateView.as_view(), name='field-create'),
     path('<uuid:template_id>/fields/<uuid:field_id>/', AdminFieldUpdateView.as_view(), name='field-update-delete'),
     path('<uuid:template_id>/fields/reorder/', AdminFieldReorderView.as_view(), name='field-reorder'),
+    
+    
+    # Employees safety form interactions
+    ##########################################################################################
+    # Employee — per job
+    path('job/<uuid:job_id>/', JobSafetyFormsView.as_view(), name='job-safety-forms-status'),
+    path('job/<uuid:job_id>/template/<uuid:template_id>/', SafetyFormTemplateDetailForEmployeeView.as_view(), name='job-safety-form-detail'),
+    path('job/<uuid:job_id>/template/<uuid:template_id>/submit/', SafetyFormSubmitView.as_view(), name='safety-form-submit'),
+
+    # Submission detail
+    path('submission/<uuid:submission_id>/', SafetyFormSubmissionDetailView.as_view(), name='safety-form-submission-detail'),
+
+    # Admin — all submissions for a job
+    path('admin/job/<uuid:job_id>/submissions/', AdminJobSafetySubmissionsView.as_view(), name='admin-job-submissions'),
 ]
