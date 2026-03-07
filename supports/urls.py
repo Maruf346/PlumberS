@@ -17,8 +17,8 @@ urlpatterns = [
     # path('contactus/create/', CreateContactSupportView.as_view(), name='contact-create'),
     
     # About Us
-    # path('about-us/', AboutUsPublicView.as_view(), name='about-us-public'),
-    # path('admin/about-us/', AboutUsAdminUpdateView.as_view(), name='about-us-admin'),
+    path('about-us/', AboutUsPublicView.as_view(), name='about-us-public'),
+    path('admin/about-us/', AboutUsAdminUpdateView.as_view(), name='about-us-admin'),
     
     # Terms and Conditions
     path('terms/', TermsAndConditionsPublicView.as_view(), name='terms-public'),
