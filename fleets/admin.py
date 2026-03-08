@@ -11,7 +11,7 @@ class MaintenanceInline(admin.TabularInline):
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
-    list_display = ['name', 'plate', 'status', 'assigned_to', 'next_service_km', 'is_active']
+    list_display = ['name', 'plate', 'status', 'next_service_km', 'is_active']
     list_filter = ['status', 'is_active']
     search_fields = ['name', 'plate']
     readonly_fields = ['id', 'status', 'created_at', 'updated_at']

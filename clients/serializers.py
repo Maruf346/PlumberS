@@ -30,14 +30,30 @@ class ClientListSerializer(serializers.ModelSerializer):
     # Employees and managers see this — no site_access exposed.
 
     maps_url = serializers.ReadOnlyField()
+    job_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
         fields = [
-            'id', 'name', 'phone', 'email',
-            'profile_picture', 'address', 'maps_url',
-            'contact_person_name', 'is_active'
+            'id', 'name', 'profile_picture',
+            'email', 'phone',
+            'address', 'maps_url',
+            'contact_person_name',
+            'job_count',
+            'is_active',
         ]
+
+    def get_job_count(self, obj):
+        return obj.jobs.count()
+
+
+class ClientJobMinimalSerializer(serializers.Serializer):
+    # Lightweight job item nested inside client detail.
+    
+    id = serializers.UUIDField()
+    job_id = serializers.CharField()
+    job_name = serializers.CharField()
+    status = serializers.CharField()
 
 
 class ClientDetailSerializer(serializers.ModelSerializer):
@@ -45,13 +61,25 @@ class ClientDetailSerializer(serializers.ModelSerializer):
     # Used by all authenticated staff (they need gate codes when on a job).
 
     maps_url = serializers.ReadOnlyField()
+    job_count = serializers.SerializerMethodField()
+    jobs = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
         fields = [
-            'id', 'name', 'phone', 'email',
-            'profile_picture', 'address', 'maps_url',
-            'contact_person_name', 'site_access',
-            'is_active', 'created_at', 'updated_at'
+            'id', 'name', 'profile_picture',
+            'phone', 'email',
+            'contact_person_name',
+            'address', 'maps_url',
+            'site_access',
+            'is_active',
+            'created_at', 'updated_at',
+            'job_count', 'jobs',
         ]
-        read_only_fields = fields
+
+    def get_job_count(self, obj):
+        return obj.jobs.count()
+
+    def get_jobs(self, obj):
+        jobs = obj.jobs.only('id', 'job_id', 'job_name', 'status').order_by('-created_at')
+        return ClientJobMinimalSerializer(jobs, many=True).data

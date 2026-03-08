@@ -26,7 +26,7 @@ class ContactSupport(models.Model):
 class FAQ(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     question = models.CharField(max_length=500)
-    answer = CKEditor5Field('Answer', config_name='default')
+    answer = models.CharField(max_length=500)
     # order = models.PositiveIntegerField(
     #     default=0,
     #     help_text='Order in which FAQs appear (lower numbers first)'
