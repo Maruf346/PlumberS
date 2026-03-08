@@ -576,7 +576,6 @@ class TotalUsersCountView(APIView):
     summary="Admin user list",
     description="Retrieve a list of all registered users with filtering and ordering options.",
 )
-@method_decorator(ratelimit(key='user', rate='180/h', method='GET', block=False), name='dispatch')
 class UserListView(ListAPIView):
     queryset = User.objects.filter(is_staff=False).order_by('-created_at')
     serializer_class = UserSerializer
@@ -585,7 +584,20 @@ class UserListView(ListAPIView):
     ordering_fields = ['created_at', 'email', 'full_name']
     ordering = ['-created_at']
     
-    
+
+@extend_schema(
+    tags=["admin"],
+    summary="Admin manager list",
+    description="Retrieve a list of all registered managers with filtering and ordering options.",
+)
+class ManagerListView(ListAPIView):
+    queryset = User.objects.filter(is_staff=True, is_superuser=False).order_by('-created_at')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]
+    filterset_fields = ['is_active', 'provider']
+    ordering_fields = ['created_at', 'email', 'full_name']
+    ordering = ['-created_at']
+
     
 # ==================== ONBOARDING VIEWS ====================
 

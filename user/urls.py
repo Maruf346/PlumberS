@@ -41,7 +41,8 @@ urlpatterns = [
     # path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
     path('admin/login/', AdminDashboardLoginView.as_view(), name='admin-dashboard-login'),
     path('admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
-    # path('admin/userlist/', UserListView.as_view(), name='admin-user-list'),
+    path('admin/employeelist/', UserListView.as_view(), name='admin-user-list'),
+    path('admin/managerlist/', ManagerListView.as_view(), name='admin-manager-list'),
     
     # Onboarding
     path('onboarding/step1/', OnboardingStep1View.as_view(), name='onboarding-step1'),
