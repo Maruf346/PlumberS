@@ -103,7 +103,7 @@ class AdminClientListView(ListAPIView):
     Supports filtering by is_active.
     """
     permission_classes = [IsAdmin]
-    serializer_class = ClientSerializer
+    serializer_class = ClientListSerializer
     filterset_fields = ['is_active']
     ordering_fields = ['name', 'created_at']
     ordering = ['name']
