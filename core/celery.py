@@ -27,4 +27,12 @@ app.conf.beat_schedule = {
         'task': 'jobs.tasks.mark_overdue_jobs',
         'schedule': crontab(minute='*/30'),
     },
+    'notify-overdue-jobs': {
+        'task': 'notifications.tasks.notify_overdue_jobs',
+        'schedule': crontab(minute='*/30'),
+    },
+    'notify-vehicle-service-overdue': {
+        'task': 'notifications.tasks.notify_vehicle_service_overdue',
+        'schedule': crontab(hour=8, minute=0),  # daily at 8 AM
+    },
 }

@@ -145,6 +145,7 @@ class PasswordResetService:
             'expires_in_seconds': settings.PASSWORD_RESET_OTP_EXPIRY_SECONDS
         }
         
+    @staticmethod
     def verify_reset_otp(email, otp):
         cache_key = f'password_reset_otp:{email}'
         stored_otp = cache.get(cache_key)
