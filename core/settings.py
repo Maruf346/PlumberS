@@ -251,11 +251,11 @@ SPECTACULAR_SETTINGS = {
 
 # Jazzmin settings
 JAZZMIN_SETTINGS = {
-    "site_title": "Autointel Diagnostics Admin",
-    "site_header": "Autointel",
-    "site_brand": "Autointel",
-    "welcome_sign": "Welcome to the Autointel Diagnostics Admin Panel",
-    "copyright": "Autointel Diagnostics © 2026",
+    "site_title": "PlumberS Admin",
+    "site_header": "PlumberS",
+    "site_brand": "PlumberS",
+    "welcome_sign": "Welcome to the PlumberS Admin Panel",
+    "copyright": "PlumberS © 2026",
     "user_avatar": None,
     "icons": {
         "auth": "fas fa-users-cog",
