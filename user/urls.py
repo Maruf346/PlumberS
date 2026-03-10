@@ -45,6 +45,7 @@ urlpatterns = [
     path('admin/managerlist/', ManagerListView.as_view(), name='admin-manager-list'),
     path('admin/managers/<uuid:id>/', AdminManagerDetailView.as_view(), name='admin-manager-detail'),
     path('admin/manager/<uuid:id>/update/', AdminUpdateManagerView.as_view(), name='admin-manager-update'),
+    path('admin/manager/<uuid:id>/delete/', AdminDeleteManagerView.as_view(), name='admin-manager-delete'),
     
     # Onboarding
     path('onboarding/step1/', OnboardingStep1View.as_view(), name='onboarding-step1'),

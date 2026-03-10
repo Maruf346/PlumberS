@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView, RetrieveAPIView, RetrieveUpdateAPIView, UpdateAPIView
+from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView, RetrieveAPIView, RetrieveUpdateAPIView, UpdateAPIView, DestroyAPIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly, IsAdminUser
@@ -820,6 +820,23 @@ class AdminUpdateManagerView(UpdateAPIView):
     )
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+
+class AdminDeleteManagerView(DestroyAPIView):
+    permission_classes = [IsAdminUser]
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return User.objects.filter(is_staff=True, is_superuser=False)
+
+    @extend_schema(
+        tags=['Manager'],
+        summary="Delete manager",
+        description="Admin permanently deletes a manager account and their associated profile."
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+    
 
 class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
     """
