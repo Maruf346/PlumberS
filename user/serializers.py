@@ -878,11 +878,29 @@ class ManagerDetailSerializer(serializers.ModelSerializer):
     
     
 class AdminUpdateManagerSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(max_length=50, required=False)
+    last_name = serializers.CharField(max_length=50, required=False)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    profile_picture = serializers.ImageField(required=False)
+
     class Meta:
         model = User
-        fields = ['full_name', 'phone', 'profile_picture']
+        fields = ['first_name', 'last_name', 'phone', 'profile_picture']
 
-    def validate_phone(self, value):
-        if value:
-            return value.strip()
-        return value
+    def update(self, instance, validated_data):
+        first_name = validated_data.pop('first_name', None)
+        last_name = validated_data.pop('last_name', None)
+
+        if first_name or last_name:
+            parts = instance.full_name.split(' ', 1)
+            current_first = parts[0] if parts else ''
+            current_last = parts[1] if len(parts) > 1 else ''
+            instance.full_name = f"{first_name or current_first} {last_name or current_last}".strip()
+
+        if 'phone' in validated_data:
+            instance.phone = validated_data['phone']
+        if 'profile_picture' in validated_data:
+            instance.profile_picture = validated_data['profile_picture']
+
+        instance.save()
+        return instance

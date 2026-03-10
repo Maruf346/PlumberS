@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView, RetrieveAPIView, RetrieveUpdateAPIView
+from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView, RetrieveAPIView, RetrieveUpdateAPIView, UpdateAPIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly, IsAdminUser
@@ -791,62 +791,35 @@ class AdminCreateManagerView(APIView):
         )
 
 
-class AdminUpdateManagerView(APIView):
+class AdminUpdateManagerView(UpdateAPIView):
     permission_classes = [IsAdminUser]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    serializer_class = AdminUpdateManagerSerializer
+    lookup_field = 'id'
+    http_method_names = ['put', 'patch']
+
+    def get_queryset(self):
+        return User.objects.filter(is_staff=True, is_superuser=False)
+
+
+    # @extend_schema(tags=['Manager'], summary="Get manager for edit")
+    # def get(self, request, *args, **kwargs):
+    #     return super().get(request, *args, **kwargs)
 
     @extend_schema(
         tags=['Manager'],
-        summary="Update manager profile",
-        description="Admin updates a manager's name, phone, or profile picture.",
-        request=AdminUpdateManagerSerializer,
-        responses={200: AdminUpdateManagerSerializer},
+        summary="Update manager",
+        description="Admin fully updates manager name, phone, or profile picture."
     )
-    def patch(self, request, id):
-        manager = get_object_or_404(
-            User,
-            id=id,
-            is_staff=True,
-            is_superuser=False
-        )
-        serializer = AdminUpdateManagerSerializer(
-            manager,
-            data=request.data,
-            partial=True
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({
-            'message': 'Manager updated successfully.',
-            'data': ManagerDetailSerializer(manager, context={'request': request}).data
-        }, status=status.HTTP_200_OK)
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
 
     @extend_schema(
         tags=['Manager'],
-        summary="Replace manager profile",
-        description="Admin fully replaces a manager's name, phone, and profile picture.",
-        request=AdminUpdateManagerSerializer,
-        responses={200: AdminUpdateManagerSerializer},
+        summary="Partially update manager",
+        description="Admin partially updates manager name, phone, or profile picture."
     )
-    def put(self, request, id):
-        manager = get_object_or_404(
-            User,
-            id=id,
-            is_staff=True,
-            is_superuser=False
-        )
-        serializer = AdminUpdateManagerSerializer(
-            manager,
-            data=request.data,
-            partial=False
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({
-            'message': 'Manager updated successfully.',
-            'data': ManagerDetailSerializer(manager, context={'request': request}).data
-        }, status=status.HTTP_200_OK)
-
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
 
 class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
     """
