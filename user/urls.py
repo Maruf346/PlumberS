@@ -43,6 +43,8 @@ urlpatterns = [
     path('admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
     path('admin/employeelist/', UserListView.as_view(), name='admin-user-list'),
     path('admin/managerlist/', ManagerListView.as_view(), name='admin-manager-list'),
+    path('admin/managers/<uuid:id>/', AdminManagerDetailView.as_view(), name='admin-manager-detail'),
+    path('admin/manager/<uuid:id>/update/', AdminUpdateManagerView.as_view(), name='admin-manager-update'),
     
     # Onboarding
     path('onboarding/step1/', OnboardingStep1View.as_view(), name='onboarding-step1'),

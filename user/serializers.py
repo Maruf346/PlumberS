@@ -828,3 +828,61 @@ class AdminEmployeeListSerializer(serializers.ModelSerializer):
             return obj.employee_profile.primary_skill
         except EmployeeProfile.DoesNotExist:
             return None
+
+
+
+class ManagerJobMinimalSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    job_id = serializers.CharField()
+    job_name = serializers.CharField()
+    status = serializers.CharField()
+
+
+class ManagerDetailSerializer(serializers.ModelSerializer):
+    notes = serializers.SerializerMethodField()
+    job_count = serializers.SerializerMethodField()
+    assigned_staff_count = serializers.SerializerMethodField()
+    assigned_jobs = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'phone',
+            'profile_picture', 'is_active',
+            'job_count', 'assigned_staff_count',
+            'notes', 'assigned_jobs',
+            'created_at',
+        ]
+
+    def get_notes(self, obj):
+        try:
+            return obj.manager_profile.notes
+        except Exception:
+            return None
+
+    def get_job_count(self, obj):
+        return obj.managed_jobs.count()
+
+    def get_assigned_staff_count(self, obj):
+        # Distinct employees across all jobs this manager is assigned to
+        from jobs.models import Job
+        return Job.objects.filter(
+            assigned_managers=obj
+        ).values('assigned_to').distinct().count()
+
+    def get_assigned_jobs(self, obj):
+        jobs = obj.managed_jobs.only(
+            'id', 'job_id', 'job_name', 'status'
+        ).order_by('-created_at')
+        return ManagerJobMinimalSerializer(jobs, many=True).data
+    
+    
+class AdminUpdateManagerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['full_name', 'phone', 'profile_picture']
+
+    def validate_phone(self, value):
+        if value:
+            return value.strip()
+        return value

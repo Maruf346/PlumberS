@@ -16,6 +16,8 @@ from rest_framework.generics import GenericAPIView
 from google_auth_oauthlib.flow import Flow
 from django.conf import settings
 from django.shortcuts import redirect
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.shortcuts import get_object_or_404
 from user.services import RegistrationService, PasswordResetService
 import logging
 import jwt
@@ -586,7 +588,7 @@ class UserListView(ListAPIView):
     
 
 @extend_schema(
-    tags=["admin"],
+    tags=["Manager"],
     summary="Admin manager list",
     description="Retrieve a list of all registered managers with filtering and ordering options.",
 )
@@ -598,7 +600,27 @@ class ManagerListView(ListAPIView):
     ordering_fields = ['created_at', 'email', 'full_name']
     ordering = ['-created_at']
 
-    
+
+class AdminManagerDetailView(RetrieveAPIView):
+    permission_classes = [IsAdminUser]
+    serializer_class = ManagerDetailSerializer
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return User.objects.filter(
+            is_staff=True,
+            is_superuser=False
+        ).select_related('manager_profile')
+
+    @extend_schema(
+        tags=['Manager'],
+        summary="Manager detail",
+        description="Retrieve full manager profile including assigned jobs and staff count."
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
 # ==================== ONBOARDING VIEWS ====================
 
 class OnboardingStep1View(APIView):
@@ -752,7 +774,7 @@ class AdminCreateManagerView(APIView):
     serializer_class = AdminCreateManagerSerializer
 
     @extend_schema(
-        tags=['admin'],
+        tags=['Manager'],
         summary="Create manager account",
         description="Admin creates a new manager user with profile."
     )
@@ -767,6 +789,63 @@ class AdminCreateManagerView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+class AdminUpdateManagerView(APIView):
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(
+        tags=['Manager'],
+        summary="Update manager profile",
+        description="Admin updates a manager's name, phone, or profile picture.",
+        request=AdminUpdateManagerSerializer,
+        responses={200: AdminUpdateManagerSerializer},
+    )
+    def patch(self, request, id):
+        manager = get_object_or_404(
+            User,
+            id=id,
+            is_staff=True,
+            is_superuser=False
+        )
+        serializer = AdminUpdateManagerSerializer(
+            manager,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'message': 'Manager updated successfully.',
+            'data': ManagerDetailSerializer(manager, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=['Manager'],
+        summary="Replace manager profile",
+        description="Admin fully replaces a manager's name, phone, and profile picture.",
+        request=AdminUpdateManagerSerializer,
+        responses={200: AdminUpdateManagerSerializer},
+    )
+    def put(self, request, id):
+        manager = get_object_or_404(
+            User,
+            id=id,
+            is_staff=True,
+            is_superuser=False
+        )
+        serializer = AdminUpdateManagerSerializer(
+            manager,
+            data=request.data,
+            partial=False
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'message': 'Manager updated successfully.',
+            'data': ManagerDetailSerializer(manager, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
 
 
 class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
