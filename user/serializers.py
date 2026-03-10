@@ -1,4 +1,6 @@
 from rest_framework.serializers import ModelSerializer
+from certificates.models import Certificate
+from jobs.models import Job
 from .models import *
 from rest_framework import serializers
 from django.core.validators import validate_email
@@ -830,6 +832,32 @@ class AdminEmployeeListSerializer(serializers.ModelSerializer):
             return None
 
 
+class AdminEmployeeListsSerializer(ModelSerializer):
+    role = serializers.CharField(read_only=True)
+    onboarding_complete = serializers.SerializerMethodField()
+    jobs_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'username', 'phone',
+            'profile_picture', 'birth_date', 'is_active',
+            'role', 'onboarding_complete', 'jobs_count',
+            'provider', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'is_active', 'email', 'provider', 'created_at', 'updated_at']
+
+    def get_onboarding_complete(self, obj):
+        if obj.is_employee:
+            try:
+                return obj.employee_profile.onboarding_complete
+            except EmployeeProfile.DoesNotExist:
+                return False
+        return True
+
+    def get_jobs_count(self, obj):
+        return obj.assigned_jobs.count()  # adjust related_name to match your Job model
+
 
 class ManagerJobMinimalSerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -904,3 +932,59 @@ class AdminUpdateManagerSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+    
+    
+    
+class JobSummarySerializer(ModelSerializer):
+    class Meta:
+        model = Job  # your Job model
+        fields = ['id', 'name', 'status']  # adjust field names to match your Job model
+
+
+class EmployeeCertificateSerializer(ModelSerializer):
+    class Meta:
+        model = Certificate
+        fields = [
+            'id', 'name', 'issuing_organization', 'description',
+            'issue_date', 'expiration_date', 'media',
+            'created_at', 'updated_at'
+        ]
+
+
+class EmployeeProfileSerializer(ModelSerializer):
+    emergency_contact = EmergencyContactSerializer(read_only=True)  # if you have one, else remove
+
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'primary_skill', 'employee_id', 'profession',
+            'emergency_contact', 'uses_company_vehicle',
+            'drivers_license_number', 'license_expiry_date',
+            'drivers_license_file', 'onboarding_complete',
+            'created_at', 'updated_at'
+        ]
+
+
+class AdminUserDetailSerializer(ModelSerializer):
+    role = serializers.CharField(read_only=True)
+    employee_profile = EmployeeProfileSerializer(read_only=True)
+    jobs_count = serializers.SerializerMethodField()
+    jobs = serializers.SerializerMethodField()
+    certificates = EmployeeCertificateSerializer(many=True, read_only=True)  # uses related_name='certificates'
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'username', 'phone',
+            'profile_picture', 'birth_date', 'is_active',
+            'role', 'provider', 'employee_profile',
+            'jobs_count', 'jobs', 'certificates',
+            'created_at', 'updated_at'
+        ]
+
+    def get_jobs_count(self, obj):
+        return obj.assigned_jobs.count()  # adjust related_name
+
+    def get_jobs(self, obj):
+        jobs = obj.assigned_jobs.all()  # adjust related_name
+        return JobSummarySerializer(jobs, many=True).data

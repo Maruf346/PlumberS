@@ -844,8 +844,10 @@ class AdminUserDetailView(RetrieveUpdateDestroyAPIView):
     PATCH is_active=False to block a user.
     """
     permission_classes = [IsAdminUser]
-    serializer_class = AdminEmployeeListSerializer
-    queryset = User.objects.all()
+    serializer_class = AdminUserDetailSerializer  # <-- was AdminEmployeeListSerializer
+    queryset = User.objects.filter(is_staff=False, is_superuser=False).select_related(
+        'employee_profile', 'employee_profile__emergency_contact'
+    ).prefetch_related('assigned_jobs', 'certificates').order_by('-created_at')
     lookup_field = 'id'
 
     @extend_schema(tags=['admin'], summary="Get user detail")
@@ -903,7 +905,7 @@ class AdminBlockUserView(APIView):
 class AdminUserListView(ListAPIView):
     # Admin lists all users (employees + managers).
     permission_classes = [IsAdminUser]
-    serializer_class = AdminEmployeeListSerializer
+    serializer_class = AdminEmployeeListsSerializer
     filterset_fields = ['is_active', 'is_staff', 'provider']
     ordering_fields = ['created_at', 'email', 'full_name']
     ordering = ['-created_at']
