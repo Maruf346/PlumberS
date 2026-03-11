@@ -60,8 +60,13 @@ class RegistrationService:
         }
         cache.set(cache_key, registration_data, settings.OTP_EXPIRY_SECONDS)
 
-        from user.tasks import send_registration_otp_email
-        send_registration_otp_email.delay(email, otp, username)  # use username as name
+        try:
+            from user.tasks import send_registration_otp_email
+            send_registration_otp_email.delay(email, otp, username)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to queue OTP email: {str(e)}")
+            # Don't raise — OTP is already stored in Redis, user can retry
 
         return {
             'message': 'OTP sent to your email. Please verify to complete registration.',

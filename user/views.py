@@ -108,15 +108,13 @@ class VerifyRegistrationOTPView(APIView):
             
             logger.info(f"User registered successfully: {user.email}")
             
-            # Send welcome email asynchronously
-            from user.tasks import send_welcome_email
-            send_welcome_email.delay(user.email, user.full_name)
-            
-            # Send welcome notification
-            NotificationTemplates.welcome(user)
-            
-            # Notify admins
-            NotificationTemplates.new_user_joined(user)
+            try:
+                from user.tasks import send_welcome_email
+                send_welcome_email.delay(user.email, user.full_name)
+                # NotificationTemplates.welcome(user)
+                NotificationTemplates.new_user_joined(user)
+            except Exception as e:
+                logger.error(f"Post-registration notifications failed for {user.email}: {str(e)}")
             
             return Response(response_data, status=status.HTTP_201_CREATED)
         
@@ -580,7 +578,7 @@ class TotalUsersCountView(APIView):
 )
 class UserListView(ListAPIView):
     queryset = User.objects.filter(is_staff=False).order_by('-created_at')
-    serializer_class = UserSerializer
+    serializer_class = AdminEmployeeListsSerializer
     permission_classes = [IsAdminUser]
     filterset_fields = ['is_active', 'provider']
     ordering_fields = ['created_at', 'email', 'full_name']

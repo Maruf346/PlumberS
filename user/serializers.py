@@ -937,8 +937,8 @@ class AdminUpdateManagerSerializer(serializers.ModelSerializer):
     
 class JobSummarySerializer(ModelSerializer):
     class Meta:
-        model = Job  # your Job model
-        fields = ['id', 'name', 'status']  # adjust field names to match your Job model
+        model = Job
+        fields = ['id', 'job_id', 'job_name', 'status']  # matches your Job model
 
 
 class EmployeeCertificateSerializer(ModelSerializer):
