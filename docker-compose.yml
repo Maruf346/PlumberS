@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ──────────────────────────────────────────────
 #  Shared build config for all Django-based services
 # ──────────────────────────────────────────────
@@ -10,15 +8,11 @@ x-django-base: &django-base
   env_file:
     - .env
   volumes:
-    - .:/app                     # live code reload
-    - /app/entrypoint.sh         # PROTECT: prevents local CRLF entrypoint.sh from overwriting
-                                 # the LF-fixed version that was baked into the image by sed.
-                                 # This is an "anonymous volume" trick — Docker uses the image's
-                                 # version of this single file, not your local disk's version.
-    - sqlite_data:/app/db_volume                   # persistent SQLite DB
-    - media_data:/app/media                        # persistent uploaded files
-    - static_data:/app/staticfiles                 # shared static files
-    - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+    - .:/app                           # live code reload — covers /app only
+    # /entrypoint.sh is at container root, outside /app — never overwritten by this mount
+    - sqlite_data:/app/db_volume       # persistent SQLite DB
+    - media_data:/app/media            # persistent uploaded files
+    - static_data:/app/staticfiles     # shared static files
   depends_on:
     redis:
       condition: service_healthy
@@ -30,8 +24,10 @@ services:
   django:
     <<: *django-base
     container_name: plumbers_django
+    environment:
+      SERVICE_TYPE: django             # entrypoint uses this to run migrate + daphne
     ports:
-      - "8888:8000"              # host:container — access at http://localhost:8888
+      - "8888:8000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
@@ -44,24 +40,23 @@ services:
   celery_worker:
     <<: *django-base
     container_name: plumbers_celery_worker
-    command: celery -A core worker --loglevel=info --pool=solo
+    environment:
+      SERVICE_TYPE: celery_worker      # entrypoint skips daphne, runs celery worker
     restart: unless-stopped
-    # No ports — internal only
 
   # ── Celery Beat ──────────────────────────────
   celery_beat:
     <<: *django-base
     container_name: plumbers_celery_beat
-    command: celery -A core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment:
+      SERVICE_TYPE: celery_beat        # entrypoint skips daphne, runs celery beat
     restart: unless-stopped
-    # No ports — internal only
 
   # ── Redis ────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: plumbers_redis
     restart: unless-stopped
-    # No ports exposed — internal only (Django, Celery, Channels all reach it via service name)
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -74,16 +69,9 @@ services:
     container_name: plumbers_mailhog
     restart: unless-stopped
     ports:
-      - "8020:8025"   # Web UI — open http://localhost:8020 to read emails
-    # SMTP port 1025 stays internal — Django reaches it via service name "mailhog"
+      - "8020:8025"                    # Mailhog UI at http://localhost:8020
 
 
-# ──────────────────────────────────────────────
-#  Named Volumes
-#  sqlite_data  → persists db.sqlite3 across image rebuilds / pulls
-#  media_data   → persists user-uploaded files
-#  static_data  → shared between django container and any future nginx
-# ──────────────────────────────────────────────
 volumes:
   sqlite_data:
   media_data:

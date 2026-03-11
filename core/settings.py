@@ -1,8 +1,8 @@
 from pathlib import Path
 import os
 from datetime import timedelta
-import firebase_admin
-from firebase_admin import credentials
+# import firebase_admin
+# from firebase_admin import credentials
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'phonenumber_field',
     'django_ckeditor_5',
     'channels',
+    'django_celery_beat',
     
     # Local apps
     'user',
@@ -465,14 +466,14 @@ LOGGING = {
 
 
 # Firebase Configuration
-FIREBASE_CREDENTIALS_PATH = os.path.join(BASE_DIR, 'firebase-credentials.json')
+# FIREBASE_CREDENTIALS_PATH = os.path.join(BASE_DIR, 'firebase-credentials.json')
 
-# Initialize Firebase Admin SDK
-if os.path.exists(FIREBASE_CREDENTIALS_PATH):
-    cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-    firebase_admin.initialize_app(cred)
-else:
-    print("WARNING: Firebase credentials not found. Push notifications disabled.")
+# # Initialize Firebase Admin SDK
+# if os.path.exists(FIREBASE_CREDENTIALS_PATH):
+#     cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+#     firebase_admin.initialize_app(cred)
+# else:
+#     print("WARNING: Firebase credentials not found. Push notifications disabled.")
 
 # Channels Configuration (for WebSocket)
 ASGI_APPLICATION = 'core.asgi.application'

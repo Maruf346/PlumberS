@@ -71,12 +71,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ── 5. Create stub firebase credentials ───
-      #    (settings.py already handles missing file gracefully)
-      - name: Create stub firebase credentials
-        run: |
-          echo '{"type":"service_account","project_id":"ci","private_key_id":"ci","private_key":"","client_email":"","client_id":"","auth_uri":"","token_uri":"","auth_provider_x509_cert_url":"","client_x509_cert_url":""}' > firebase-credentials.json
-  
+      # Firebase is disabled in settings.py — no stub needed.
+      # If you re-enable Firebase later, create the credentials
+      # as a GitHub Secret and write it to file here.
+
       - name: Run Django system check
         run: python manage.py check
 
