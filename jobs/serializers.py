@@ -1,6 +1,12 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import *
+from .models import (
+    Job, JobAttachment, JobLineItem, JobActivity,
+    JobStatus, JobPriority, ActivityType,
+    # JobPhoto,   # commented out — photos now in reports app
+    # JobTask,    # commented out — tasks feature deferred
+    # JobNote,    # commented out — chat feature deferred
+)
 from clients.serializers import ClientListSerializer
 from fleets.serializers import VehicleListSerializer
 from user.models import User
@@ -24,13 +30,13 @@ class JobAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'file_name', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
 
 
-class JobPhotoSerializer(serializers.ModelSerializer):
-    uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
-
-    class Meta:
-        model = JobPhoto
-        fields = ['id', 'image', 'caption', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
-        read_only_fields = ['id', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+# ── JobPhotoSerializer — commented out ───────────────────────────────────────
+# class JobPhotoSerializer(serializers.ModelSerializer):
+#     uploaded_by_name = serializers.CharField(source='uploaded_by.full_name', read_only=True)
+#     class Meta:
+#         model = JobPhoto
+#         fields = ['id', 'image', 'caption', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+#         read_only_fields = ['id', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
 
 
 class JobLineItemSerializer(serializers.ModelSerializer):
@@ -42,36 +48,36 @@ class JobLineItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'total']
 
 
-class JobTaskSerializer(serializers.ModelSerializer):
-    completed_by_name = serializers.CharField(source='completed_by.full_name', read_only=True)
-
-    class Meta:
-        model = JobTask
-        fields = [
-            'id', 'description', 'is_done',
-            'completed_by', 'completed_by_name',
-            'completed_at', 'order'
-        ]
-        read_only_fields = ['id', 'completed_by', 'completed_by_name', 'completed_at']
-
-
-class JobNoteSerializer(serializers.ModelSerializer):
-    sender_name = serializers.CharField(source='sender.full_name', read_only=True)
-    sender_role = serializers.CharField(source='sender.role', read_only=True)
-
-    class Meta:
-        model = JobNote
-        fields = [
-            'id', 'sender', 'sender_name', 'sender_role',
-            'message', 'is_system_message', 'created_at'
-        ]
-        read_only_fields = ['id', 'sender', 'sender_name', 'sender_role', 'is_system_message', 'created_at']
+# ── JobTaskSerializer — commented out ────────────────────────────────────────
+# class JobTaskSerializer(serializers.ModelSerializer):
+#     completed_by_name = serializers.CharField(source='completed_by.full_name', read_only=True)
+#     class Meta:
+#         model = JobTask
+#         fields = [
+#             'id', 'description', 'is_done',
+#             'completed_by', 'completed_by_name',
+#             'completed_at', 'order'
+#         ]
+#         read_only_fields = ['id', 'completed_by', 'completed_by_name', 'completed_at']
 
 
-class JobNoteCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JobNote
-        fields = ['message']
+# ── JobNoteSerializer — commented out ────────────────────────────────────────
+# class JobNoteSerializer(serializers.ModelSerializer):
+#     sender_name = serializers.CharField(source='sender.full_name', read_only=True)
+#     sender_role = serializers.CharField(source='sender.role', read_only=True)
+#     class Meta:
+#         model = JobNote
+#         fields = [
+#             'id', 'sender', 'sender_name', 'sender_role',
+#             'message', 'is_system_message', 'created_at'
+#         ]
+#         read_only_fields = ['id', 'sender', 'sender_name', 'sender_role',
+#                             'is_system_message', 'created_at']
+#
+# class JobNoteCreateSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = JobNote
+#         fields = ['message']
 
 
 # ==================== ASSIGNED USER SERIALIZERS ====================
@@ -88,6 +94,20 @@ class AssignedManagerSerializer(serializers.ModelSerializer):
         fields = ['id', 'full_name', 'email', 'phone']
 
 
+# ==================== REPORT SUMMARY (used inside job serializers) ====================
+
+class JobReportSummarySerializer(serializers.Serializer):
+    """
+    Lightweight report summary nested inside job detail responses.
+    Gives the frontend the job_report_id it needs to call report endpoints.
+    """
+    job_report_id = serializers.UUIDField(source='id')
+    report_type = serializers.CharField()
+    report_type_display = serializers.CharField(source='get_report_type_display')
+    is_submitted = serializers.BooleanField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+
+
 # ==================== JOB SERIALIZERS ====================
 
 class JobListSerializer(serializers.ModelSerializer):
@@ -98,44 +118,33 @@ class JobListSerializer(serializers.ModelSerializer):
     is_overdue = serializers.ReadOnlyField()
     has_fleet_issue = serializers.ReadOnlyField()
     safety_form_count = serializers.SerializerMethodField()
-    task_count = serializers.SerializerMethodField()
-    completed_task_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
-            # 'insured_name',  # Commented out as it's not used
             'scheduled_datetime',
             'client', 'client_name', 'client_address',
             'assigned_to', 'is_overdue', 'has_fleet_issue',
-            'safety_form_count', 'task_count', 'completed_task_count',
+            'safety_form_count',
             'created_at'
         ]
 
     def get_safety_form_count(self, obj):
         return obj.safety_forms.count()
 
-    def get_task_count(self, obj):
-        return obj.tasks.count()
-
-    def get_completed_task_count(self, obj):
-        return obj.tasks.filter(is_done=True).count()
-
 
 class JobDetailSerializer(serializers.ModelSerializer):
-    """Full detail — all nested data."""
+    """Full detail — all nested data. Used by admin/manager."""
     assigned_to = AssignedEmployeeSerializer(read_only=True)
     assigned_managers = AssignedManagerSerializer(many=True, read_only=True)
     client = ClientListSerializer(read_only=True)
     vehicle = VehicleListSerializer(read_only=True)
     attachments = JobAttachmentSerializer(many=True, read_only=True)
-    photos = JobPhotoSerializer(many=True, read_only=True)
     line_items = JobLineItemSerializer(many=True, read_only=True)
-    tasks = JobTaskSerializer(many=True, read_only=True)
-    notes = JobNoteSerializer(many=True, read_only=True)
     activities = JobActivitySerializer(many=True, read_only=True)
     safety_forms = serializers.SerializerMethodField()
+    reports = serializers.SerializerMethodField()
     grand_total = serializers.SerializerMethodField()
     is_overdue = serializers.ReadOnlyField()
     has_fleet_issue = serializers.ReadOnlyField()
@@ -144,12 +153,12 @@ class JobDetailSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
-            'job_details', # 'insured_name',
+            'job_details',
             'scheduled_datetime',
             'client', 'assigned_to', 'assigned_managers',
-            'vehicle', 'safety_forms', 'report_template_ids',
-            'attachments', 'photos', 'line_items', 'tasks',
-            'notes', 'activities',
+            'vehicle', 'safety_forms', 'reports',
+            'attachments', 'line_items',
+            'activities',
             'grand_total', 'is_overdue', 'has_fleet_issue',
             'created_at', 'updated_at'
         ]
@@ -157,6 +166,11 @@ class JobDetailSerializer(serializers.ModelSerializer):
     def get_safety_forms(self, obj):
         from safety_forms.serializers import SafetyFormTemplateListSerializer
         return SafetyFormTemplateListSerializer(obj.safety_forms.all(), many=True).data
+
+    def get_reports(self, obj):
+        # Import here to avoid circular imports
+        job_reports = obj.job_reports.all().order_by('created_at')
+        return JobReportSummarySerializer(job_reports, many=True).data
 
     def get_grand_total(self, obj):
         return sum(item.total for item in obj.line_items.all())
@@ -166,6 +180,8 @@ class JobWriteSerializer(serializers.ModelSerializer):
     """
     Admin creates or updates a job.
     All relation fields accept PKs/UUIDs.
+    report_type_ids accepts a list of report type strings e.g. ['root', 'appliance']
+    and creates JobReport records in the same transaction.
     """
     assigned_to_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
     assigned_manager_ids = serializers.ListField(
@@ -180,15 +196,21 @@ class JobWriteSerializer(serializers.ModelSerializer):
         required=False,
         write_only=True
     )
+    report_type_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        write_only=True,
+        help_text="List of report type strings e.g. ['root', 'appliance']"
+    )
 
     class Meta:
         model = Job
         fields = [
-            'job_name', 'job_details', # 'insured_name',
+            'job_name', 'job_details',
             'priority',
-            'scheduled_datetime', 'report_template_ids',
+            'scheduled_datetime',
             'client_id', 'assigned_to_id', 'assigned_manager_ids',
-            'vehicle_id', 'safety_form_ids',
+            'vehicle_id', 'safety_form_ids', 'report_type_ids',
         ]
 
     def validate_assigned_to_id(self, value):
@@ -235,22 +257,33 @@ class JobWriteSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f'Safety form {fid} not found or inactive.')
         return value
 
-    def _set_relations(self, job, validated_data):
+    def validate_report_type_ids(self, value):
+        from reports.models import ReportType
+        valid = [choice[0] for choice in ReportType.choices]
+        for rt in value:
+            if rt not in valid:
+                raise serializers.ValidationError(
+                    f'"{rt}" is not a valid report type. Valid choices: {valid}'
+                )
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError('Duplicate report types are not allowed.')
+        return value
+
+    def _set_relations(self, job, validated_data, is_create=False):
         from fleets.models import Vehicle
         from clients.models import Client
         from safety_forms.models import SafetyFormTemplate
+        from reports.models import JobReport
 
         assigned_to_id = validated_data.pop('assigned_to_id', 'UNCHANGED')
         assigned_manager_ids = validated_data.pop('assigned_manager_ids', 'UNCHANGED')
         vehicle_id = validated_data.pop('vehicle_id', 'UNCHANGED')
         client_id = validated_data.pop('client_id', 'UNCHANGED')
         safety_form_ids = validated_data.pop('safety_form_ids', 'UNCHANGED')
+        report_type_ids = validated_data.pop('report_type_ids', 'UNCHANGED')
 
         if assigned_to_id != 'UNCHANGED':
             job.assigned_to = User.objects.get(id=assigned_to_id) if assigned_to_id else None
-            # Auto-set status to pending if unassigned, keep in_progress if already started
-            # if not assigned_to_id and job.status == JobStatus.PENDING:
-            #     job.status = JobStatus.PENDING
 
         if vehicle_id != 'UNCHANGED':
             job.vehicle = Vehicle.objects.get(id=vehicle_id) if vehicle_id else None
@@ -268,30 +301,54 @@ class JobWriteSerializer(serializers.ModelSerializer):
             forms = SafetyFormTemplate.objects.filter(id__in=safety_form_ids)
             job.safety_forms.set(forms)
 
+        if report_type_ids != 'UNCHANGED':
+            if is_create:
+                # On create: bulk-create all JobReport records
+                JobReport.objects.bulk_create([
+                    JobReport(job=job, report_type=rt)
+                    for rt in report_type_ids
+                ])
+            else:
+                # On update: add new ones, leave existing submissions untouched
+                existing = set(
+                    job.job_reports.values_list('report_type', flat=True)
+                )
+                new_types = set(report_type_ids)
+                # Add newly requested types
+                to_add = new_types - existing
+                JobReport.objects.bulk_create([
+                    JobReport(job=job, report_type=rt)
+                    for rt in to_add
+                ])
+                # Remove types no longer requested — only if not yet submitted
+                to_remove = existing - new_types
+                job.job_reports.filter(
+                    report_type__in=to_remove,
+                    is_submitted=False
+                ).delete()
+
         return job
 
     def create(self, validated_data):
-        job = Job.objects.create(**{
-            k: v for k, v in validated_data.items()
-            if k not in [
-                'assigned_to_id', 'assigned_manager_ids',
-                'vehicle_id', 'client_id', 'safety_form_ids'
-            ]
-        })
-        return self._set_relations(job, validated_data)
+        # Pop all relation fields before creating the Job instance
+        relation_keys = [
+            'assigned_to_id', 'assigned_manager_ids',
+            'vehicle_id', 'client_id', 'safety_form_ids', 'report_type_ids'
+        ]
+        clean_data = {k: v for k, v in validated_data.items() if k not in relation_keys}
+        job = Job.objects.create(**clean_data)
+        return self._set_relations(job, validated_data, is_create=True)
 
     def update(self, instance, validated_data):
-        for attr in ['job_name', 'job_details', 'priority', 'scheduled_datetime', 'report_template_ids']:
+        scalar_fields = ['job_name', 'job_details', 'priority', 'scheduled_datetime']
+        for attr in scalar_fields:
             if attr in validated_data:
                 setattr(instance, attr, validated_data.pop(attr))
-        return self._set_relations(instance, validated_data)
+        return self._set_relations(instance, validated_data, is_create=False)
 
 
 class JobScheduleSerializer(serializers.ModelSerializer):
-    """
-    Dedicated serializer for the drag-and-drop calendar reschedule endpoint.
-    Only updates scheduled_datetime.
-    """
+    """Dedicated for drag-and-drop calendar reschedule. Only updates scheduled_datetime."""
     class Meta:
         model = Job
         fields = ['scheduled_datetime']
@@ -300,7 +357,6 @@ class JobScheduleSerializer(serializers.ModelSerializer):
         old_dt = instance.scheduled_datetime
         instance.scheduled_datetime = validated_data['scheduled_datetime']
         instance.save()
-        # Log rescheduling activity
         JobActivity.objects.create(
             job=instance,
             activity_type=ActivityType.JOB_RESCHEDULED,
@@ -319,29 +375,24 @@ class JobStatusUpdateSerializer(serializers.ModelSerializer):
     def validate_status(self, value):
         instance = self.instance
         user = self.context['request'].user
-
         allowed_transitions = {
             JobStatus.PENDING: [JobStatus.IN_PROGRESS],
             JobStatus.IN_PROGRESS: [JobStatus.COMPLETED],
-            JobStatus.OVERDUE: [JobStatus.COMPLETED],  # can only complete, not restart
+            JobStatus.OVERDUE: [JobStatus.COMPLETED],
         }
-
         allowed = allowed_transitions.get(instance.status, [])
         if value not in allowed:
             raise serializers.ValidationError(
                 f'Cannot transition from "{instance.status}" to "{value}".'
             )
-
         if not user.is_superuser and instance.assigned_to != user:
             raise serializers.ValidationError('You are not assigned to this job.')
-
         return value
 
     def update(self, instance, validated_data):
         new_status = validated_data['status']
         instance.status = new_status
         instance.save()
-
         activity_map = {
             JobStatus.IN_PROGRESS: ActivityType.JOB_STARTED,
             JobStatus.COMPLETED: ActivityType.JOB_COMPLETED,
@@ -366,16 +417,12 @@ class JobDashboardSerializer(serializers.Serializer):
     overdue_jobs = serializers.IntegerField()
     pending_safety_forms = serializers.IntegerField()
     fleet_issues = serializers.IntegerField()
-    
-    
+
+
 # ==================== EMPLOYEE-FACING SERIALIZERS ====================
 
 class JobMinimalSerializer(serializers.ModelSerializer):
-    """
-    Minimal job card — used in list views (today/upcoming/completed,
-    and calendar today/tomorrow/this week).
-    Sorted by scheduled_datetime in the view.
-    """
+    """Minimal job card for list views and calendar."""
     client_address = serializers.CharField(source='client.address', read_only=True)
     vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
     vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
@@ -390,38 +437,19 @@ class JobMinimalSerializer(serializers.ModelSerializer):
         ]
 
 
-class JobClientInfoSerializer(serializers.Serializer):
-    """Nested client contact block inside job detail."""
-    name = serializers.CharField()
-    email = serializers.EmailField()
-    phone = serializers.CharField()
-    profile_picture = serializers.ImageField()
-    contact_person_name = serializers.CharField()
-    address = serializers.CharField()
-    maps_url = serializers.CharField()
-
-
-class JobEmployeeInfoSerializer(serializers.Serializer):
-    """Nested assigned employee block inside job detail."""
-    id = serializers.UUIDField()
-    full_name = serializers.CharField()
-    phone = serializers.CharField()
-    email = serializers.EmailField()
-    profile_picture = serializers.ImageField()
-
-
 class EmployeeJobDetailSerializer(serializers.ModelSerializer):
     """
     Full job detail for employee-facing detail endpoint.
     Contains everything the mobile app needs to render the job screen.
+    Includes attached reports so the employee can navigate to submit them.
     """
     client_info = serializers.SerializerMethodField()
     assigned_employee_info = serializers.SerializerMethodField()
     vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
     vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
     attachments = JobAttachmentSerializer(many=True, read_only=True)
-    tasks = JobTaskSerializer(many=True, read_only=True)
     safety_form_ids = serializers.SerializerMethodField()
+    reports = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -430,8 +458,9 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
             'status', 'priority', 'scheduled_datetime',
             'vehicle_name', 'vehicle_plate',
             'client_info', 'assigned_employee_info',
-            'attachments', 'tasks',
-            'report_template_ids', 'safety_form_ids',
+            'attachments',
+            'reports',
+            'safety_form_ids',
             'created_at', 'updated_at',
         ]
 
@@ -463,7 +492,15 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
 
     def get_safety_form_ids(self, obj):
         return [str(uid) for uid in obj.safety_forms.values_list('id', flat=True)]
-    
+
+    def get_reports(self, obj):
+        """
+        Returns attached report summaries so employee sees what reports
+        are pending/submitted and gets the job_report_id to navigate to each.
+        """
+        job_reports = obj.job_reports.all().order_by('created_at')
+        return JobReportSummarySerializer(job_reports, many=True).data
+
     def _get_image_url(self, image_field):
         request = self.context.get('request')
         if image_field and request:
@@ -472,18 +509,14 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
 
 
 class EmployeeJobListResponseSerializer(serializers.Serializer):
-    """
-    Response shape for the today/upcoming/completed endpoint.
-    """
+    """Response shape for the today/upcoming/completed endpoint."""
     today = JobMinimalSerializer(many=True)
     upcoming = JobMinimalSerializer(many=True)
     completed = JobMinimalSerializer(many=True)
 
 
 class EmployeeCalendarJobsSerializer(serializers.Serializer):
-    """
-    Response shape for the calendar today/tomorrow/this week endpoint.
-    """
+    """Response shape for the calendar today/tomorrow/this week endpoint."""
     today = JobMinimalSerializer(many=True)
     tomorrow = JobMinimalSerializer(many=True)
     this_week = JobMinimalSerializer(many=True)

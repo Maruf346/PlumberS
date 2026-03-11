@@ -25,7 +25,8 @@ class ActivityType(models.TextChoices):
     TECHNICIAN_EN_ROUTE = 'technician_en_route', 'Technician En Route'
     ARRIVED_AT_SITE = 'arrived_at_site', 'Arrived at Site'
     SAFETY_FORM_SUBMITTED = 'safety_form_submitted', 'Safety Form Submitted'
-    TASK_COMPLETED = 'task_completed', 'Task Completed'
+    REPORT_SUBMITTED = 'report_submitted', 'Report Submitted'       # ← NEW
+    # TASK_COMPLETED = 'task_completed', 'Task Completed'           # commented — tasks feature off
     NOTE_ADDED = 'note_added', 'Note Added'
     FILE_UPLOADED = 'file_uploaded', 'File Uploaded'
     STATUS_CHANGED = 'status_changed', 'Status Changed'
@@ -37,14 +38,13 @@ def job_attachment_path(instance, filename):
     return f'jobs/{instance.job.job_id}/attachments/{filename}'
 
 
-def job_photo_path(instance, filename):
-    return f'jobs/{instance.job.job_id}/photos/{filename}'
+# def job_photo_path(instance, filename):           # commented — job photos now live in reports
+#     return f'jobs/{instance.job.job_id}/photos/{filename}'
 
 
 class Job(models.Model):
     """
     Core job model.
-
     Status logic:
     - PENDING:     No assigned_to, or created but not started.
     - IN_PROGRESS: Assigned employee has started the job.
@@ -124,13 +124,12 @@ class Job(models.Model):
         help_text="Safety form templates required for this job"
     )
 
-    # Report templates — nullable, manually created models later
-    # Stored as a simple JSON list of report template IDs for now
-    report_template_ids = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="List of report template IDs attached to this job"
-    )
+    # Report types — managed via reports.JobReport (FK to this model)
+    # report_template_ids = models.JSONField(   # REMOVED — replaced by reports.JobReport
+    #     default=list,
+    #     blank=True,
+    #     help_text="List of report template IDs attached to this job"
+    # )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -139,20 +138,15 @@ class Job(models.Model):
         return f"{self.job_id} — {self.get_status_display()}"
 
     def save(self, *args, **kwargs):
-        # Auto-generate job_id on first save
         if not self.job_id:
             self.job_id = self._generate_job_id()
         super().save(*args, **kwargs)
 
     @staticmethod
     def _generate_job_id():
-        from django.db.models.functions import Cast, Substr
-        from django.db.models import IntegerField
-
         last = Job.objects.filter(
             job_id__startswith='JB-'
-        ).order_by('-id').first()  # UUID ordering is fine for "latest created"
-
+        ).order_by('-id').first()
         if last:
             try:
                 last_num = int(last.job_id.split('-')[1])
@@ -162,14 +156,10 @@ class Job(models.Model):
         return "JB-1001"
 
     def check_overdue(self):
-        """
-        Call this to mark job overdue if past scheduled datetime.
-        Called from Celery beat or on retrieval.
-        """
         if (
             self.scheduled_datetime and
             timezone.now() > self.scheduled_datetime and
-            self.status not in [JobStatus.COMPLETED]  # COMPLETED is the only exempt status
+            self.status not in [JobStatus.COMPLETED]
         ):
             self.status = JobStatus.OVERDUE
             Job.objects.filter(pk=self.pk).update(status=JobStatus.OVERDUE)
@@ -218,28 +208,29 @@ class JobAttachment(models.Model):
         return f"{self.job.job_id} — {self.file_name}"
 
 
-class JobPhoto(models.Model):
-    """Photos uploaded during job execution, with captions."""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='photos')
-    image = models.ImageField(upload_to=job_photo_path)
-    caption = models.CharField(max_length=300, blank=True)
-    uploaded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True
-    )
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.job.job_id} — photo"
+# ── JobPhoto — commented out; photos now submitted via reports app ──────────
+# class JobPhoto(models.Model):
+#     """Photos uploaded during job execution, with captions."""
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='photos')
+#     image = models.ImageField(upload_to=job_photo_path)
+#     caption = models.CharField(max_length=300, blank=True)
+#     uploaded_by = models.ForeignKey(
+#         settings.AUTH_USER_MODEL,
+#         on_delete=models.SET_NULL,
+#         null=True
+#     )
+#     uploaded_at = models.DateTimeField(auto_now_add=True)
+#
+#     def __str__(self):
+#         return f"{self.job.job_id} — photo"
 
 
 class JobLineItem(models.Model):
     """
     Scope line items for a job.
-    Each row has item description, qty, unit price, and auto-computed total.
-    Grand total is computed in the serializer/view across all rows.
+    Each row: item description, qty, unit price, auto-computed subtotal.
+    Grand total computed across all rows in serializer.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='line_items')
@@ -259,61 +250,56 @@ class JobLineItem(models.Model):
         ordering = ['order']
 
 
-class JobTask(models.Model):
-    """Checklist items for a job. Employee marks each as done."""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='tasks')
-    description = models.CharField(max_length=300)
-    is_done = models.BooleanField(default=False)
-    completed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='completed_tasks'
-    )
-    completed_at = models.DateTimeField(null=True, blank=True)
-    order = models.PositiveIntegerField(default=0)
+# ── JobTask — commented out; checklist feature deferred ─────────────────────
+# class JobTask(models.Model):
+#     """Checklist items for a job. Employee marks each as done."""
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='tasks')
+#     description = models.CharField(max_length=300)
+#     is_done = models.BooleanField(default=False)
+#     completed_by = models.ForeignKey(
+#         settings.AUTH_USER_MODEL,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name='completed_tasks'
+#     )
+#     completed_at = models.DateTimeField(null=True, blank=True)
+#     order = models.PositiveIntegerField(default=0)
+#
+#     def mark_done(self, user):
+#         self.is_done = True
+#         self.completed_by = user
+#         self.completed_at = timezone.now()
+#         self.save()
+#
+#     def __str__(self):
+#         return f"{self.job.job_id} — {self.description}"
+#
+#     class Meta:
+#         ordering = ['order']
 
-    def mark_done(self, user):
-        self.is_done = True
-        self.completed_by = user
-        self.completed_at = timezone.now()
-        self.save()
 
-    def __str__(self):
-        return f"{self.job.job_id} — {self.description}"
-
-    class Meta:
-        ordering = ['order']
-
-
-class JobNote(models.Model):
-    """
-    Per-job messaging thread between employee and admin/manager.
-    Acts as a simple chat — ordered by timestamp.
-    WebSocket broadcast will be layered on top of this in the WS phase.
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='notes')
-    sender = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='job_notes'
-    )
-    message = models.TextField()
-    is_system_message = models.BooleanField(
-        default=False,
-        help_text="True for auto-generated activity messages"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.job.job_id} — {self.sender} at {self.created_at}"
-
-    class Meta:
-        ordering = ['created_at']
+# ── JobNote — commented out; chat feature deferred (WebSocket phase) ─────────
+# class JobNote(models.Model):
+#     """Per-job messaging thread between employee and admin/manager."""
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='notes')
+#     sender = models.ForeignKey(
+#         settings.AUTH_USER_MODEL,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         related_name='job_notes'
+#     )
+#     message = models.TextField()
+#     is_system_message = models.BooleanField(default=False)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#
+#     def __str__(self):
+#         return f"{self.job.job_id} — {self.sender} at {self.created_at}"
+#
+#     class Meta:
+#         ordering = ['created_at']
 
 
 class JobActivity(models.Model):
