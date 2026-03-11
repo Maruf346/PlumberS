@@ -74,9 +74,9 @@ jobs:
       # ── 5. Create stub firebase credentials ───
       #    (settings.py already handles missing file gracefully)
       - name: Create stub firebase credentials
-        run: echo '{}' > firebase-credentials.json
-
-      # ── 6. Django system check ────────────────
+        run: |
+          echo '{"type":"service_account","project_id":"ci","private_key_id":"ci","private_key":"","client_email":"","client_id":"","auth_uri":"","token_uri":"","auth_provider_x509_cert_url":"","client_x509_cert_url":""}' > firebase-credentials.json
+  
       - name: Run Django system check
         run: python manage.py check
 

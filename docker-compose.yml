@@ -10,11 +10,15 @@ x-django-base: &django-base
   env_file:
     - .env
   volumes:
-    - .:/app                                        # live code reload
-    - sqlite_data:/app/db_volume                    # persistent SQLite DB (see NOTE in .env)
-    - media_data:/app/media                         # persistent uploaded files
-    - static_data:/app/staticfiles                  # shared static files
-    - ./firebase-credentials.json:/app/firebase-credentials.json:ro  # each dev mounts their own
+    - .:/app                     # live code reload
+    - /app/entrypoint.sh         # PROTECT: prevents local CRLF entrypoint.sh from overwriting
+                                 # the LF-fixed version that was baked into the image by sed.
+                                 # This is an "anonymous volume" trick — Docker uses the image's
+                                 # version of this single file, not your local disk's version.
+    - sqlite_data:/app/db_volume                   # persistent SQLite DB
+    - media_data:/app/media                        # persistent uploaded files
+    - static_data:/app/staticfiles                 # shared static files
+    - ./firebase-credentials.json:/app/firebase-credentials.json:ro
   depends_on:
     redis:
       condition: service_healthy
@@ -27,10 +31,10 @@ services:
     <<: *django-base
     container_name: plumbers_django
     ports:
-      - "8888:8000"
+      - "8888:8000"              # host:container — access at http://localhost:8888
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/' )"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
       interval: 30s
       timeout: 10s
       retries: 5
