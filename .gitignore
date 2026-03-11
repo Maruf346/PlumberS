@@ -227,3 +227,6 @@ firebase-credentials.json
 .vscode
 celerybeat-schedule-shm
 celerybeat-schedule-wal
+db_volume/
+staticfiles/
+media/
