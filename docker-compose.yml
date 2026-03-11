@@ -7,15 +7,23 @@ x-django-base: &django-base
     dockerfile: Dockerfile
   env_file:
     - .env
+  environment:
+    # Hardcode Docker service hostnames here so Windows CRLF in .env
+    # can never corrupt them. These override any values from .env.
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    EMAIL_HOST: mailhog
+    EMAIL_PORT: "1025"
   volumes:
-    - .:/app                           # live code reload — covers /app only
-    # /entrypoint.sh is at container root, outside /app — never overwritten by this mount
-    - sqlite_data:/app/db_volume       # persistent SQLite DB
-    - media_data:/app/media            # persistent uploaded files
-    - static_data:/app/staticfiles     # shared static files
+    - .:/app
+    - sqlite_data:/app/db_volume
+    - media_data:/app/media
+    - static_data:/app/staticfiles
   depends_on:
     redis:
       condition: service_healthy
+    mailhog:
+      condition: service_started
 
 
 services:
@@ -25,7 +33,11 @@ services:
     <<: *django-base
     container_name: plumbers_django
     environment:
-      SERVICE_TYPE: django             # entrypoint uses this to run migrate + daphne
+      SERVICE_TYPE: django
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      EMAIL_HOST: mailhog
+      EMAIL_PORT: "1025"
     ports:
       - "8888:8000"
     restart: unless-stopped
@@ -41,16 +53,36 @@ services:
     <<: *django-base
     container_name: plumbers_celery_worker
     environment:
-      SERVICE_TYPE: celery_worker      # entrypoint skips daphne, runs celery worker
+      SERVICE_TYPE: celery_worker
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      EMAIL_HOST: mailhog
+      EMAIL_PORT: "1025"
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+      django:
+        condition: service_healthy   # wait for migrations to finish before worker starts
 
   # ── Celery Beat ──────────────────────────────
   celery_beat:
     <<: *django-base
     container_name: plumbers_celery_beat
     environment:
-      SERVICE_TYPE: celery_beat        # entrypoint skips daphne, runs celery beat
+      SERVICE_TYPE: celery_beat
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      EMAIL_HOST: mailhog
+      EMAIL_PORT: "1025"
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_healthy   # wait for migrations before beat starts
 
   # ── Redis ────────────────────────────────────
   redis:
@@ -69,7 +101,7 @@ services:
     container_name: plumbers_mailhog
     restart: unless-stopped
     ports:
-      - "8020:8025"                    # Mailhog UI at http://localhost:8020
+      - "8020:8025"
 
 
 volumes:
