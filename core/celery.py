@@ -2,26 +2,32 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-
-# Set the default Django settings module
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 
-app = Celery('core')   # Creates a celery app named 'core'
+# Read directly from env — never from a pre-evaluated f-string
+REDIS_HOST = os.environ.get('REDIS_HOST') or 'localhost'
+REDIS_PORT = os.environ.get('REDIS_PORT') or '6379'
+BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
 
-# Load task modules from all registered Django apps
-app.config_from_object('django.conf:settings', namespace='CELERY')  # Settings vars that starts with CELERY_...
+app = Celery('core')
 
-# Auto-discover tasks in all installed apps
+# Explicitly set broker BEFORE config_from_object so it's never overridden
+# by a stale value from settings that was evaluated at a different time
+app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# Explicitly override broker/backend with live env values
+# This is the definitive fix — these always win
+app.conf.broker_url = BROKER_URL
+app.conf.result_backend = BROKER_URL
+
 app.autodiscover_tasks()
 
-# @app.task → registers this as a Celery task.
-# ignore_result: Celery will not store the task result
+
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
-    
 
-# Celery Beat Schedule
+
 app.conf.beat_schedule = {
     'mark-overdue-jobs': {
         'task': 'jobs.tasks.mark_overdue_jobs',
@@ -33,6 +39,6 @@ app.conf.beat_schedule = {
     },
     'notify-vehicle-service-overdue': {
         'task': 'notifications.tasks.notify_vehicle_service_overdue',
-        'schedule': crontab(hour=8, minute=0),  # daily at 8 AM
+        'schedule': crontab(hour=8, minute=0),
     },
 }

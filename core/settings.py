@@ -118,20 +118,20 @@ else:
 
 
 # Redis Configuration
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = os.getenv('REDIS_PORT', '6379')
+# REDIS_HOST = os.getenv('REDIS_HOST') or 'localhost'
+# REDIS_PORT = os.getenv('REDIS_PORT') or '6379'
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1', # conn url, [/1 -> Redis db no. 1]
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-        'KEY_PREFIX': 'autointel',   # Adds a prefix to every cache key.
-        'TIMEOUT': 300,  # Default cache expiry time = 300s (5 mins).
-    }
-}
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1', # conn url, [/1 -> Redis db no. 1]
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#         },
+#         'KEY_PREFIX': 'autointel',   # Adds a prefix to every cache key.
+#         'TIMEOUT': 300,  # Default cache expiry time = 300s (5 mins).
+#     }
+# }
 
 
 # CORS configs
@@ -324,14 +324,43 @@ SIMPLE_JWT = {
 
 
 # Celery Configs
-CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'  # message broker
-CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/0' 
+CELERY_BROKER_URL = 'redis://{host}:{port}/0'.format(
+    host=os.environ.get('REDIS_HOST') or 'localhost',
+    port=os.environ.get('REDIS_PORT') or '6379',
+)  # message broker
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_ACCEPT_CONTENT = ['json']  # Celery will only accept tasks serialized as JSON.
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True  # Celery tracks when a task starts executing.
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+
+
+# ── And the Redis cache section ───────────────────────────────────────────
+_REDIS_HOST = os.environ.get('REDIS_HOST') or 'localhost'
+_REDIS_PORT = os.environ.get('REDIS_PORT') or '6379'
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'redis://{_REDIS_HOST}:{_REDIS_PORT}/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'autointel',
+        'TIMEOUT': 300,
+    }
+}
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [(_REDIS_HOST, int(_REDIS_PORT))],
+        },
+    },
+}
 
 
 # Email Configs (MailHog for development)
@@ -478,14 +507,15 @@ LOGGING = {
 # Channels Configuration (for WebSocket)
 ASGI_APPLICATION = 'core.asgi.application'
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [(os.getenv('REDIS_HOST', 'localhost'), int(os.getenv('REDIS_PORT', '6379')))],
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             "hosts": [(os.getenv('REDIS_HOST') or 'localhost',
+#                        int(os.getenv('REDIS_PORT') or '6379'))],
+#         },
+#     },
+# }
 
 
 # AI Service Configuration
