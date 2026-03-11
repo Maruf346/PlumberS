@@ -27,7 +27,7 @@ services:
     <<: *django-base
     container_name: plumbers_django
     ports:
-      - "8000:8000"
+      - "8888:8000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/' )"]
@@ -70,7 +70,7 @@ services:
     container_name: plumbers_mailhog
     restart: unless-stopped
     ports:
-      - "8025:8025"   # Web UI — open http://localhost:8025 to read emails
+      - "8020:8025"   # Web UI — open http://localhost:8020 to read emails
     # SMTP port 1025 stays internal — Django reaches it via service name "mailhog"
 
 

@@ -46,8 +46,10 @@ COPY --from=builder /install /usr/local
 # Copy project source
 COPY . .
 
-# Make entrypoint executable
-RUN chmod +x /app/entrypoint.sh
+# Fix Windows CRLF line endings AND make executable.
+# This is the permanent fix for "exec /app/entrypoint.sh: no such file or directory"
+# which happens when the file is saved with \r\n on Windows.
+RUN sed -i 's/\r//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Create directories that Django needs
 RUN mkdir -p /app/staticfiles /app/media
