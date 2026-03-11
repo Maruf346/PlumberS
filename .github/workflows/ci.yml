@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    # ── Spin up Redis as a service container ──
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DEBUG: "True"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      EMAIL_HOST: localhost
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "False"
+      EMAIL_USE_SSL: "False"
+      EMAIL_HOST_USER: ""
+      EMAIL_HOST_PASSWORD: ""
+      DEFAULT_FROM_EMAIL: noreply@plumbers.com
+      BASE_URL: http://127.0.0.1:8000/
+      FRONTEND_URL: http://localhost:3000
+      FRONTEND_LOGIN_SUCCESS_URL: http://localhost:3000/dashboard
+      FRONTEND_LOGIN_ERROR_URL: http://localhost:3000/login?error=true
+      # OAuth placeholders (not used in tests but settings.py reads them)
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GOOGLE_REDIRECT_URI: ""
+      GOOGLE_WEB_CLIENT_ID: ""
+      APPLE_CLIENT_ID: ""
+
+    steps:
+      # ── 1. Checkout ───────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ──────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # ── 3. Install system dependencies ────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libpq-dev libjpeg-dev libmagic1 zlib1g-dev
+
+      # ── 4. Install Python dependencies ────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 5. Create stub firebase credentials ───
+      #    (settings.py already handles missing file gracefully)
+      - name: Create stub firebase credentials
+        run: echo '{}' > firebase-credentials.json
+
+      # ── 6. Django system check ────────────────
+      - name: Run Django system check
+        run: python manage.py check
+
+      # ── 7. Run migrations ─────────────────────
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+
+      # ── 8. Run tests ──────────────────────────
+      - name: Run tests
+        run: python manage.py test --verbosity=2
+
+      # ── 9. Docker build validation ────────────
+      - name: Build Docker image
+        run: docker build -t plumbers-api:ci .

@@ -1,0 +1,86 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────
+#  Shared build config for all Django-based services
+# ──────────────────────────────────────────────
+x-django-base: &django-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  volumes:
+    - .:/app                                        # live code reload
+    - sqlite_data:/app/db_volume                    # persistent SQLite DB (see NOTE in .env)
+    - media_data:/app/media                         # persistent uploaded files
+    - static_data:/app/staticfiles                  # shared static files
+    - ./firebase-credentials.json:/app/firebase-credentials.json:ro  # each dev mounts their own
+  depends_on:
+    redis:
+      condition: service_healthy
+
+
+services:
+
+  # ── Django / Daphne ──────────────────────────
+  django:
+    <<: *django-base
+    container_name: plumbers_django
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/' )"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ── Celery Worker ────────────────────────────
+  celery_worker:
+    <<: *django-base
+    container_name: plumbers_celery_worker
+    command: celery -A core worker --loglevel=info --pool=solo
+    restart: unless-stopped
+    # No ports — internal only
+
+  # ── Celery Beat ──────────────────────────────
+  celery_beat:
+    <<: *django-base
+    container_name: plumbers_celery_beat
+    command: celery -A core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    restart: unless-stopped
+    # No ports — internal only
+
+  # ── Redis ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: plumbers_redis
+    restart: unless-stopped
+    # No ports exposed — internal only (Django, Celery, Channels all reach it via service name)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MailHog ──────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: plumbers_mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # Web UI — open http://localhost:8025 to read emails
+    # SMTP port 1025 stays internal — Django reaches it via service name "mailhog"
+
+
+# ──────────────────────────────────────────────
+#  Named Volumes
+#  sqlite_data  → persists db.sqlite3 across image rebuilds / pulls
+#  media_data   → persists user-uploaded files
+#  static_data  → shared between django container and any future nginx
+# ──────────────────────────────────────────────
+volumes:
+  sqlite_data:
+  media_data:
+  static_data:

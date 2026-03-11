@@ -1,0 +1,46 @@
+# ── Python ───────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Django runtime artifacts ──────────────────
+db.sqlite3
+*.log
+staticfiles/
+media/
+
+# ── Environment & secrets ─────────────────────
+.env
+firebase-credentials.json
+google-play-service-account.json
+
+# ── Docker ────────────────────────────────────
+docker-compose.override.yml
+
+# ── Git ───────────────────────────────────────
+.git/
+.gitignore
+
+# ── IDE / OS ──────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Testing & coverage ────────────────────────
+.coverage
+.pytest_cache/
+htmlcov/
