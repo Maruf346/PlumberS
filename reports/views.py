@@ -12,13 +12,13 @@ from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmploy
 from jobs.models import JobActivity, ActivityType
 from .models import (
     JobReport, ReportType,
-    RootReportSubmission, ApplianceReportSubmission,
+    RoofReportSubmission, ApplianceReportSubmission,
     DrainInspectionSubmission, LeakInspectionSubmission,
     SprayTestSubmission,
 )
 from .serializers import (
     JobReportListSerializer, ReportTypeChoiceSerializer,
-    RootReportFormSerializer, RootReportSubmitSerializer, RootReportReadSerializer,
+    RoofReportFormSerializer, RoofReportSubmitSerializer, RoofReportReadSerializer,
     ApplianceReportFormSerializer, ApplianceReportSubmitSerializer, ApplianceReportReadSerializer,
     DrainInspectionFormSerializer, DrainInspectionSubmitSerializer, DrainInspectionReadSerializer,
     LeakInspectionFormSerializer, LeakInspectionSubmitSerializer, LeakInspectionReadSerializer,
@@ -27,11 +27,11 @@ from .serializers import (
 
 # Map report_type → (FormSerializer, SubmitSerializer, ReadSerializer, submission_related_name)
 REPORT_REGISTRY = {
-    ReportType.ROOT: (
-        RootReportFormSerializer,
-        RootReportSubmitSerializer,
-        RootReportReadSerializer,
-        'root_submission',
+    ReportType.ROOF: (
+        RoofReportFormSerializer,
+        RoofReportSubmitSerializer,
+        RoofReportReadSerializer,
+        'roof_submission',
     ),
     ReportType.APPLIANCE: (
         ApplianceReportFormSerializer,

@@ -180,7 +180,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
     """
     Admin creates or updates a job.
     All relation fields accept PKs/UUIDs.
-    report_type_ids accepts a list of report type strings e.g. ['root', 'appliance']
+    report_type_ids accepts a list of report type strings e.g. ['roof', 'appliance']
     and creates JobReport records in the same transaction.
     """
     assigned_to_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
@@ -200,7 +200,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
         child=serializers.CharField(),
         required=False,
         write_only=True,
-        help_text="List of report type strings e.g. ['root', 'appliance']"
+        help_text="List of report type strings e.g. ['roof', 'appliance']"
     )
 
     class Meta:

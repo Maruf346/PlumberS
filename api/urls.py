@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-
+from reports.views import JobReportListView
 
 
 urlpatterns = [
@@ -19,8 +19,9 @@ urlpatterns = [
     path('fleet/', include('fleets.urls')),
     path('jobs/', include('jobs.urls')),
     path('inspections/', include('fleet_inspections.urls')),
-    # path('notification/', include('notifications.urls')),
-
+    path('api/reports/', include('reports.urls')),
+    path('notification/', include('notifications.urls')),
+    path('jobs/<uuid:job_id>/reports/', JobReportListView.as_view(), name='job-reports'),
     
     #JWT endpoints
     # path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

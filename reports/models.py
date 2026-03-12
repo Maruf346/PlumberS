@@ -8,7 +8,7 @@ import uuid
 # ==================== CHOICES ====================
 
 class ReportType(models.TextChoices):
-    ROOT = 'root', 'Root Report'
+    ROOF = 'roof', 'Roof Report'
     APPLIANCE = 'appliance', 'Appliance Report'
     DRAIN_INSPECTION = 'drain_inspection', 'Drain Inspection Report'
     LEAK_INSPECTION = 'leak_inspection', 'Leak Inspection Report'
@@ -173,20 +173,20 @@ class ReportPhoto(models.Model):
         return f"{self.photo_type} — {self.object_id}"
 
 
-# ==================== ROOT REPORT ====================
+# ==================== ROOF REPORT ====================
 
-class RootReportSubmission(models.Model):
+class RoofReportSubmission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job_report = models.OneToOneField(
         JobReport,
         on_delete=models.CASCADE,
-        related_name='root_submission'
+        related_name='roof_submission'
     )
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='root_reports'
+        related_name='roof_reports'
     )
 
     # Snapshot of pre-filled DB fields at submission time (for PDF integrity)
@@ -244,10 +244,10 @@ class RootReportSubmission(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Root Report Submission'
+        verbose_name = 'Roof Report Submission'
 
     def __str__(self):
-        return f"Root Report — {self.job_report.job.job_id}"
+        return f"Roof Report — {self.job_report.job.job_id}"
 
 
 # ==================== APPLIANCE REPORT ====================

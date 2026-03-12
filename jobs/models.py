@@ -38,8 +38,8 @@ def job_attachment_path(instance, filename):
     return f'jobs/{instance.job.job_id}/attachments/{filename}'
 
 
-# def job_photo_path(instance, filename):           # commented — job photos now live in reports
-#     return f'jobs/{instance.job.job_id}/photos/{filename}'
+def job_photo_path(instance, filename):           # commented — job photos now live in reports
+    return f'jobs/{instance.job.job_id}/photos/{filename}'
 
 
 class Job(models.Model):

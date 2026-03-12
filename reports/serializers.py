@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from .models import (
     JobReport, ReportPhoto, ReportType,
-    RootReportSubmission, ApplianceReportSubmission,
+    RoofReportSubmission, ApplianceReportSubmission,
     DrainInspectionSubmission, LeakInspectionSubmission,
     SprayTestSubmission,
     YesNoNA, PassFailNA, ConditionRating,
@@ -101,12 +101,12 @@ class BaseFormSerializer(serializers.Serializer):
     is_submitted = serializers.BooleanField()
 
 
-# ==================== ROOT REPORT ====================
+# ==================== ROOF REPORT ====================
 
-class RootReportFormSerializer(serializers.Serializer):
+class RoofReportFormSerializer(serializers.Serializer):
     """
     GET /api/reports/{job_report_id}/form/
-    Returns pre-filled data + available choices for the Root Report form.
+    Returns pre-filled data + available choices for the Roof Report form.
     """
     pre_filled = serializers.SerializerMethodField()
     choices = serializers.SerializerMethodField()
@@ -145,12 +145,12 @@ class RootReportFormSerializer(serializers.Serializer):
         if not obj.is_submitted:
             return None
         try:
-            return RootReportReadSerializer(obj.root_submission).data
-        except RootReportSubmission.DoesNotExist:
+            return RoofReportReadSerializer(obj.roof_submission).data
+        except RoofReportSubmission.DoesNotExist:
             return None
 
 
-class RootReportSubmitSerializer(serializers.ModelSerializer):
+class RoofReportSubmitSerializer(serializers.ModelSerializer):
     """
     POST /api/reports/{job_report_id}/submit/
     Accepts only employee-filled fields.
@@ -168,7 +168,7 @@ class RootReportSubmitSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = RootReportSubmission
+        model = RoofReportSubmission
         fields = [
             'attendance_datetime',
             'discussion_with_insured',
@@ -202,14 +202,14 @@ class RootReportSubmitSerializer(serializers.ModelSerializer):
         job_report = self.context['job_report']
         user = self.context['request'].user
 
-        submission = RootReportSubmission.objects.create(
+        submission = RoofReportSubmission.objects.create(
             job_report=job_report,
             submitted_by=user,
             snapshot=_build_snapshot(job_report),
             **validated_data
         )
 
-        ct = ContentType.objects.get_for_model(RootReportSubmission)
+        ct = ContentType.objects.get_for_model(RoofReportSubmission)
         self._save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
         self._save_photos(ct, submission.id, damage_photos, 'damage_photo')
         self._save_photos(ct, submission.id, job_photos, 'job_photo')
@@ -233,13 +233,13 @@ class RootReportSubmitSerializer(serializers.ModelSerializer):
             )
 
 
-class RootReportReadSerializer(serializers.ModelSerializer):
-    """Read-only view of a submitted Root Report."""
+class RoofReportReadSerializer(serializers.ModelSerializer):
+    """Read-only view of a submitted Roof Report."""
     photos = serializers.SerializerMethodField()
     submitted_by_name = serializers.CharField(source='submitted_by.full_name', read_only=True)
 
     class Meta:
-        model = RootReportSubmission
+        model = RoofReportSubmission
         fields = [
             'id', 'submitted_by', 'submitted_by_name',
             'snapshot', 'attendance_datetime',
@@ -253,7 +253,7 @@ class RootReportReadSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_photos(self, obj):
-        ct = ContentType.objects.get_for_model(RootReportSubmission)
+        ct = ContentType.objects.get_for_model(RoofReportSubmission)
         photos = ReportPhoto.objects.filter(content_type=ct, object_id=obj.id)
         request = self.context.get('request')
         result = {}
@@ -341,8 +341,8 @@ class ApplianceReportSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(ApplianceReportSubmission)
-        RootReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_property')
-        RootReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
+        RoofReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_property')
+        RoofReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -462,9 +462,9 @@ class DrainInspectionSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(DrainInspectionSubmission)
-        RootReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
-        RootReportSubmitSerializer._save_photos(ct, submission.id, damage_photos, 'damage_photo')
-        RootReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
+        RoofReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
+        RoofReportSubmitSerializer._save_photos(ct, submission.id, damage_photos, 'damage_photo')
+        RoofReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -604,7 +604,7 @@ class LeakInspectionSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(LeakInspectionSubmission)
-        save = RootReportSubmitSerializer._save_photos
+        save = RoofReportSubmitSerializer._save_photos
         save(ct, submission.id, front_photos, 'front_of_dwelling')
         save(ct, submission.id, damage_photos, 'damage_photo')
         save(ct, submission.id, spindle_photos, 'spindle_photo')
@@ -747,7 +747,7 @@ class SprayTestSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(SprayTestSubmission)
-        save = RootReportSubmitSerializer._save_photos
+        save = RoofReportSubmitSerializer._save_photos
         save(ct, submission.id, front_photos, 'front_of_dwelling')
         save(ct, submission.id, damage_photos, 'damage_photo')
         save(ct, submission.id, job_photos, 'job_photo')
