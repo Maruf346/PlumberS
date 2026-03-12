@@ -75,6 +75,11 @@ jobs:
       # If you re-enable Firebase later, create the credentials
       # as a GitHub Secret and write it to file here.
 
+      # ── 5. Create db_volume directory ─────────
+      # SQLite path is BASE_DIR/db_volume/db.sqlite3 — directory must exist
+      - name: Create db_volume directory
+        run: mkdir -p db_volume
+
       - name: Run Django system check
         run: python manage.py check
 
