@@ -322,7 +322,7 @@ class JobAttachmentUploadView(APIView):
     permission_classes = [IsAdminOrManagerOrEmployee]
     parser_classes = [MultiPartParser, FormParser]
 
-    @extend_schema(tags=['jobs'], summary="Upload job attachment")
+    @extend_schema(tags=['jobs'], summary="Upload job attachment", request=JobAttachmentSerializer)
     def post(self, request, id):
         job = get_object_or_404(Job, id=id)
         files = request.FILES.getlist('files')
@@ -372,7 +372,7 @@ class JobLineItemView(APIView):
     """Admin manages line items for job scope."""
     permission_classes = [IsAdminOrManager]
 
-    @extend_schema(tags=['jobs'], summary="Add line item")
+    @extend_schema(tags=['jobs'], summary="Add line item", request=JobLineItemSerializer)
     def post(self, request, id):
         job = get_object_or_404(Job, id=id)
         serializer = JobLineItemSerializer(data=request.data)
@@ -388,7 +388,7 @@ class JobLineItemDetailView(APIView):
     """Update or delete a specific line item."""
     permission_classes = [IsAdminOrManager]
 
-    @extend_schema(tags=['jobs'], summary="Update line item")
+    @extend_schema(tags=['jobs'], summary="Update line item", request=JobLineItemSerializer)
     def patch(self, request, id, item_id):
         item = get_object_or_404(JobLineItem, id=item_id, job__id=id)
         serializer = JobLineItemSerializer(item, data=request.data, partial=True)
