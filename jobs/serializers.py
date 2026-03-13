@@ -116,14 +116,15 @@ class JobListSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='client.name', read_only=True)
     client_address = serializers.CharField(source='client.address', read_only=True)
     is_overdue = serializers.ReadOnlyField()
-    has_fleet_issue = serializers.ReadOnlyField()
+    has_fleet_issue = serializers.SerializerMethodField()
     safety_form_count = serializers.SerializerMethodField()
+    vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
 
     class Meta:
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
-            'scheduled_datetime',
+            'scheduled_datetime', "vehicle_name",
             'client', 'client_name', 'client_address',
             'assigned_to', 'is_overdue', 'has_fleet_issue',
             'safety_form_count',
@@ -132,6 +133,11 @@ class JobListSerializer(serializers.ModelSerializer):
 
     def get_safety_form_count(self, obj):
         return obj.safety_forms.count()
+    
+    def get_has_fleet_issue(self, obj):
+        if not obj.vehicle:
+            return False
+        return obj.vehicle.status == 'issue_reported'
 
 
 class JobDetailSerializer(serializers.ModelSerializer):
