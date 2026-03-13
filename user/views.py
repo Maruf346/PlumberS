@@ -592,7 +592,7 @@ class UserListView(ListAPIView):
 )
 class ManagerListView(ListAPIView):
     queryset = User.objects.filter(is_staff=True, is_superuser=False).order_by('-created_at')
-    serializer_class = UserSerializer
+    serializer_class = ManagerListSerializer
     permission_classes = [IsAdminUser]
     filterset_fields = ['is_active', 'provider']
     ordering_fields = ['created_at', 'email', 'full_name']

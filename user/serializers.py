@@ -235,6 +235,19 @@ class UserSerializer(ModelSerializer):
                 return False
         return True  # managers and admins skip onboarding
 
+class ManagerListSerializer(ModelSerializer):
+    role = serializers.CharField(read_only=True)
+    jobs_count = serializers.IntegerField(source='managed_jobs.count', read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'username', 'phone',
+            'profile_picture', 'birth_date', 'is_active',
+            'role', 'jobs_count',
+            'provider', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'is_active', 'email', 'provider', 'created_at', 'updated_at']
 
 
 class UserProfileSerializer(ModelSerializer):
