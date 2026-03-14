@@ -260,7 +260,14 @@ class FeedbackSubmitView(APIView):
     def post(self, request):
         serializer = FeedbackSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user)
+        feedback = serializer.save(user=request.user)
+
+        try:
+            from notifications.services import NotificationTemplates
+            NotificationTemplates.support_feedback_received(feedback) # Notify admin about new feedback
+        except Exception:
+            pass
+
         return Response(
             {'message': 'Feedback submitted successfully.', 'data': serializer.data},
             status=status.HTTP_201_CREATED
@@ -322,7 +329,14 @@ class IssueReportSubmitView(APIView):
     def post(self, request):
         serializer = IssueReportSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user)
+        report = serializer.save(user=request.user)
+
+        try:
+            from notifications.services import NotificationTemplates
+            NotificationTemplates.issue_report_received(report)  # Notify admin about new issue report
+        except Exception:
+            pass
+
         return Response(
             {'message': 'Issue report submitted successfully.', 'data': serializer.data},
             status=status.HTTP_201_CREATED
