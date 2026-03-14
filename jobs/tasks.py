@@ -17,7 +17,7 @@ def mark_overdue_jobs():
     overdue_candidates = Job.objects.filter(
         scheduled_datetime__lt=timezone.now()
     ).exclude(
-        status__in=[JobStatus.COMPLETED, JobStatus.OVERDUE]
+        status__in=[JobStatus.COMPLETED]
     )
 
     count = overdue_candidates.count()
