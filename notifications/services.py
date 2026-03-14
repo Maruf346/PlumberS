@@ -244,6 +244,28 @@ class NotificationTemplates:
                 'employee_id': str(employee.id),
             },
         )
+        
+            
+    # ==================== REPORTS ====================
+    @staticmethod
+    def report_submitted(job_report, employee):
+        """Notify all admins/managers when an employee submits any report."""
+        NotificationService.send_to_admins(
+            notification_type=NotificationType.REPORT_SUBMITTED,
+            title='Report Submitted',
+            body=(
+                f'{employee.full_name} submitted '
+                f'{job_report.get_report_type_display()} '
+                f'for job {job_report.job.job_id}: {job_report.job.job_name}.'
+            ),
+            data={
+                'job_id': str(job_report.job.id),
+                'job_ref': job_report.job.job_id,
+                'job_report_id': str(job_report.id),
+                'report_type': job_report.report_type,
+                'employee_id': str(employee.id),
+            },
+        )
 
     # ==================== FLEET ====================
 

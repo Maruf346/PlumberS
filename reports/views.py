@@ -234,23 +234,10 @@ class ReportSubmitView(APIView):
         # Log to job activity timeline
         _log_report_submitted(job_report, request.user)
 
-        # Notify managers
+        # Notify admins/managers about the new report submission
         try:
-            from notifications.services import NotificationService, NotificationType, NotificationPriority
-            NotificationService.send_to_managers(
-                notification_type=NotificationType.SAFETY_FORM_SUBMITTED,  # reuse closest type
-                title='Report Submitted',
-                body=(
-                    f"{request.user.full_name} submitted "
-                    f"{job_report.get_report_type_display()} "
-                    f"for job {job_report.job.job_id}."
-                ),
-                data={
-                    'job_id': str(job_report.job.id),
-                    'job_report_id': str(job_report.id),
-                    'report_type': job_report.report_type,
-                }
-            )
+            from notifications.services import NotificationTemplates
+            NotificationTemplates.report_submitted(job_report, request.user)
         except Exception:
             pass
 

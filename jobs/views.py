@@ -199,6 +199,15 @@ class AdminJobUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
         _log_activity(job, ActivityType.STATUS_CHANGED, request.user, "Job updated by admin")
+        
+        # Notify assigned employee that their job was updated
+        try:
+            from notifications.services import NotificationTemplates
+            if job.assigned_to:
+                NotificationTemplates.job_updated(job.assigned_to, job)
+        except Exception:
+            pass
+    
         return Response(
             {'message': 'Job updated.', 'data': JobDetailSerializer(job).data},
             status=status.HTTP_200_OK
@@ -228,6 +237,15 @@ class JobScheduleView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
+        
+        # Notify assigned employee about the reschedule
+        try:
+            from notifications.services import NotificationTemplates
+            if job.assigned_to:
+                NotificationTemplates.job_rescheduled(job.assigned_to, job)
+        except Exception:
+            pass
+    
         return Response(
             {'message': 'Job rescheduled.', 'data': JobDetailSerializer(job).data},
             status=status.HTTP_200_OK
@@ -572,6 +590,13 @@ class EmployeeStartJobView(APIView):
             job.save()
 
         _log_activity(job, ActivityType.JOB_STARTED, request.user, "Job started by employee")
+
+        # Notify admins/managers           ← ADD THIS BLOCK
+        try:
+            from notifications.services import NotificationTemplates
+            NotificationTemplates.job_started(job)
+        except Exception:
+            pass
 
         return Response(
             {
