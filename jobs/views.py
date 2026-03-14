@@ -23,7 +23,7 @@ from .serializers import (
     JobScheduleSerializer, JobStatusUpdateSerializer, JobDashboardSerializer,
     JobAttachmentSerializer, JobLineItemSerializer, JobActivitySerializer,
     JobMinimalSerializer, EmployeeJobDetailSerializer,
-    EmployeeJobListResponseSerializer, EmployeeCalendarJobsSerializer,
+    EmployeeJobListResponseSerializer, EmployeeCalendarJobsSerializer, RecentActivitySerializer,
     # JobPhotoSerializer,      # commented out
     # JobTaskSerializer,       # commented out
     # JobNoteSerializer,       # commented out
@@ -651,3 +651,23 @@ class EmployeeJobAttachmentDownloadView(APIView):
             return Response({'error': 'File not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        
+class RecentActivityView(APIView):
+    # Last 5 job activities for the admin dashboard card.
+    permission_classes = [IsAdminOrManager]
+
+    @extend_schema(
+        tags=['jobs'],
+        summary="Recent job activity feed (dashboard)",
+        request=RecentActivitySerializer,
+        responses={200: RecentActivitySerializer(many=True)}
+    )
+    def get(self, request):
+        from .serializers import RecentActivitySerializer
+        activities = (
+            JobActivity.objects
+            .select_related('job', 'actor')
+            .order_by('-created_at')[:5]
+        )
+        return Response(RecentActivitySerializer(activities, many=True).data)

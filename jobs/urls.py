@@ -39,6 +39,7 @@ urlpatterns = [
 
     # ── Activity timeline ─────────────────────────────────────────────────────
     path('<uuid:id>/activity/', JobActivityListView.as_view(), name='job-activity'),
+    path('activities/recent/', RecentActivityView.as_view(), name='job-activity-recent'),
 
     # ── Mobile / Employee UI endpoints ───────────────────────────────────────
     path('employee/my-jobs/', EmployeeMyJobsView.as_view(), name='employee-my-jobs'),

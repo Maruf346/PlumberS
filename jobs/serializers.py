@@ -526,3 +526,35 @@ class EmployeeCalendarJobsSerializer(serializers.Serializer):
     today = JobMinimalSerializer(many=True)
     tomorrow = JobMinimalSerializer(many=True)
     this_week = JobMinimalSerializer(many=True)
+    
+    
+class RecentActivitySerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source='actor.full_name', read_only=True)
+    job_id = serializers.CharField(source='job.job_id', read_only=True)
+    job_name = serializers.CharField(source='job.job_name', read_only=True)
+    job_uuid = serializers.UUIDField(source='job.id', read_only=True)
+    time_ago = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobActivity
+        fields = [
+            'id', 'job_uuid', 'job_id', 'job_name',
+            'activity_type', 'actor_name',
+            'description', 'created_at', 'time_ago',
+        ]
+        read_only_fields = fields
+
+    def get_time_ago(self, obj):
+        from django.utils import timezone
+        diff = timezone.now() - obj.created_at
+        seconds = int(diff.total_seconds())
+        if seconds < 60:
+            return 'Just now'
+        minutes = seconds // 60
+        if minutes < 60:
+            return f'{minutes} min ago'
+        hours = minutes // 60
+        if hours < 24:
+            return f'{hours} hr ago'
+        days = hours // 24
+        return f'{days} day{"s" if days != 1 else ""} ago'
