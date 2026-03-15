@@ -647,8 +647,13 @@ class OnboardingStep1View(APIView):
         serializer = self.serializer_class(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # ← Use EmployeeProfileSerializer to read back, not the write serializer
         return Response(
-            {'message': 'Step 1 complete.', 'data': serializer.data},
+            {
+                'message': 'Step 1 complete.',
+                'data': EmployeeProfileSerializer(profile, context={'request': request}).data
+            },
             status=status.HTTP_200_OK
         )
 
