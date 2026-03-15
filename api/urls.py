@@ -19,7 +19,7 @@ urlpatterns = [
     path('fleet/', include('fleets.urls')),
     path('jobs/', include('jobs.urls')),
     path('inspections/', include('fleet_inspections.urls')),
-    path('api/reports/', include('reports.urls')),
+    path('reports/', include('reports.urls')),
     path('notification/', include('notifications.urls')),
     path('jobs/<uuid:job_id>/reports/', JobReportListView.as_view(), name='job-reports'),
     

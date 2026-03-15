@@ -17,19 +17,13 @@ from .models import (
 # ==================== HELPERS ====================
 
 def _choices_list(choices_class):
-    """Return choices as [{'value': ..., 'label': ...}] for frontend dropdowns."""
     return [{'value': c[0], 'label': c[1]} for c in choices_class.choices]
 
 
 def _build_snapshot(job_report):
-    """
-    Build a snapshot dict of pre-filled fields from Job/Client/User
-    at the time of submission. Stored on the submission model for PDF integrity.
-    """
     job = job_report.job
     client = job.client
     employee = job.assigned_to
-
     return {
         'job_id': job.job_id,
         'job_name': job.job_name,
@@ -46,7 +40,45 @@ def _build_snapshot(job_report):
     }
 
 
-# ==================== REPORT PHOTO SERIALIZER ====================
+def _field(name, field_type, required=False, choices=None, help_text=''):
+    """
+    Builds a single field descriptor for the /formfields/ response.
+
+    field_type values the frontend should handle:
+        datetime  → date+time picker
+        text      → single-line text input
+        textarea  → multi-line text input
+        select    → dropdown (choices provided)
+        boolean   → toggle / checkbox
+        photo     → single image upload
+        photos    → multiple images upload
+    """
+    d = {
+        'name': name,
+        'type': field_type,
+        'required': required,
+        'help_text': help_text,
+    }
+    if choices is not None:
+        d['choices'] = choices
+    if field_type == 'photos':
+        d['multiple'] = True
+    elif field_type == 'photo':
+        d['multiple'] = False
+    return d
+
+
+def _save_photos(content_type, object_id, photos, photo_type):
+    for photo in photos:
+        ReportPhoto.objects.create(
+            content_type=content_type,
+            object_id=object_id,
+            photo_type=photo_type,
+            image=photo
+        )
+
+
+# ==================== SHARED SERIALIZERS ====================
 
 class ReportPhotoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -55,10 +87,7 @@ class ReportPhotoSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'uploaded_at']
 
 
-# ==================== JOB REPORT LIST SERIALIZER (admin job panel) ====================
-
 class JobReportListSerializer(serializers.ModelSerializer):
-    """Used by admin to see all reports attached to a job."""
     report_type_display = serializers.CharField(source='get_report_type_display', read_only=True)
     submitted_by_name = serializers.CharField(
         source='submitted_by.full_name', read_only=True, allow_null=True
@@ -74,39 +103,17 @@ class JobReportListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# ==================== REPORT TYPES ENDPOINT SERIALIZER ====================
-
 class ReportTypeChoiceSerializer(serializers.Serializer):
-    """Returns available report type choices for admin job creation form."""
     value = serializers.CharField()
     label = serializers.CharField()
-
-
-# ==================== BASE FORM SERIALIZER ====================
-
-class BaseFormSerializer(serializers.Serializer):
-    """
-    Common pre-filled fields returned on every form GET.
-    These come from the DB — employee cannot edit them.
-    """
-    job_id = serializers.CharField()
-    job_name = serializers.CharField()
-    site_address = serializers.CharField()
-    client_name = serializers.CharField()
-    client_phone = serializers.CharField()
-    client_email = serializers.CharField()
-    contact_person_name = serializers.CharField()
-    employee_name = serializers.CharField()
-    scheduled_datetime = serializers.CharField()
-    is_submitted = serializers.BooleanField()
 
 
 # ==================== ROOF REPORT ====================
 
 class RoofReportFormSerializer(serializers.Serializer):
     """
-    GET /api/reports/{job_report_id}/form/
-    Returns pre-filled data + available choices for the Roof Report form.
+    GET /form/ — returns pre-filled DB values + choices + submitted data if done.
+    Frontend uses this to populate a pre-filled form.
     """
     pre_filled = serializers.SerializerMethodField()
     choices = serializers.SerializerMethodField()
@@ -145,18 +152,46 @@ class RoofReportFormSerializer(serializers.Serializer):
         if not obj.is_submitted:
             return None
         try:
-            return RoofReportReadSerializer(obj.roof_submission).data
+            return RoofReportReadSerializer(obj.roof_submission, context=self.context).data
         except RoofReportSubmission.DoesNotExist:
             return None
 
 
+ROOF_FORM_FIELDS = [
+    _field('attendance_datetime', 'datetime', required=True,
+           help_text='Date and time of attendance on site'),
+    _field('discussion_with_insured', 'textarea',
+           help_text='Notes from discussion with insured'),
+    _field('type_of_dwelling', 'select', choices=_choices_list(DwellingType),
+           help_text='Type of dwelling'),
+    _field('front_of_dwelling', 'photos',
+           help_text='Photos of the front of the dwelling'),
+    _field('resulting_damages', 'textarea',
+           help_text='Description of resulting damages'),
+    _field('damage_photos', 'photos',
+           help_text='Photos showing the resulting damages'),
+    _field('leak_fixed_by_insured', 'select', choices=_choices_list(YesNoNA),
+           help_text='Was the leak fixed by the insured?'),
+    _field('type_of_roof', 'select', choices=_choices_list(RoofType),
+           help_text='Type of roof'),
+    _field('pitch_of_roof', 'text',
+           help_text='Pitch or gradient of the roof'),
+    _field('leak_present', 'select', choices=_choices_list(YesNoNA),
+           help_text='Is a leak present?'),
+    _field('cause_of_leak_found', 'select', choices=_choices_list(YesNoNA),
+           help_text='Was the cause of the leak found?'),
+    _field('leak_fixed', 'select', choices=_choices_list(YesNoNA),
+           help_text='Has the leak been fixed?'),
+    _field('works_required', 'textarea',
+           help_text='Works required to fix the leak'),
+    _field('conclusion', 'textarea',
+           help_text='Final conclusion and recommendations'),
+    _field('job_photos', 'photos',
+           help_text='General job photos'),
+]
+
+
 class RoofReportSubmitSerializer(serializers.ModelSerializer):
-    """
-    POST /api/reports/{job_report_id}/submit/
-    Accepts only employee-filled fields.
-    Pre-filled fields are auto-populated from DB via snapshot.
-    """
-    # Photo fields — accept multiple uploaded files
     front_of_dwelling = serializers.ListField(
         child=serializers.ImageField(), write_only=True, required=False
     )
@@ -188,9 +223,7 @@ class RoofReportSubmitSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        # Ensure not already submitted
-        job_report = self.context['job_report']
-        if job_report.is_submitted:
+        if self.context['job_report'].is_submitted:
             raise serializers.ValidationError('This report has already been submitted.')
         return data
 
@@ -198,7 +231,6 @@ class RoofReportSubmitSerializer(serializers.ModelSerializer):
         front_photos = validated_data.pop('front_of_dwelling', [])
         damage_photos = validated_data.pop('damage_photos', [])
         job_photos = validated_data.pop('job_photos', [])
-
         job_report = self.context['job_report']
         user = self.context['request'].user
 
@@ -208,33 +240,19 @@ class RoofReportSubmitSerializer(serializers.ModelSerializer):
             snapshot=_build_snapshot(job_report),
             **validated_data
         )
-
         ct = ContentType.objects.get_for_model(RoofReportSubmission)
-        self._save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
-        self._save_photos(ct, submission.id, damage_photos, 'damage_photo')
-        self._save_photos(ct, submission.id, job_photos, 'job_photo')
+        _save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
+        _save_photos(ct, submission.id, damage_photos, 'damage_photo')
+        _save_photos(ct, submission.id, job_photos, 'job_photo')
 
-        # Mark JobReport as submitted
         job_report.is_submitted = True
         job_report.submitted_by = user
         job_report.submitted_at = timezone.now()
         job_report.save()
-
         return submission
-
-    @staticmethod
-    def _save_photos(content_type, object_id, photos, photo_type):
-        for photo in photos:
-            ReportPhoto.objects.create(
-                content_type=content_type,
-                object_id=object_id,
-                photo_type=photo_type,
-                image=photo
-            )
 
 
 class RoofReportReadSerializer(serializers.ModelSerializer):
-    """Read-only view of a submitted Roof Report."""
     photos = serializers.SerializerMethodField()
     submitted_by_name = serializers.CharField(source='submitted_by.full_name', read_only=True)
 
@@ -258,12 +276,9 @@ class RoofReportReadSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         result = {}
         for photo in photos:
-            pt = photo.photo_type
             url = request.build_absolute_uri(photo.image.url) if request and photo.image else None
-            result.setdefault(pt, []).append({
-                'id': str(photo.id),
-                'url': url,
-                'uploaded_at': photo.uploaded_at,
+            result.setdefault(photo.photo_type, []).append({
+                'id': str(photo.id), 'url': url, 'uploaded_at': photo.uploaded_at,
             })
         return result
 
@@ -293,15 +308,37 @@ class ApplianceReportFormSerializer(serializers.Serializer):
         }
 
     def get_choices(self, obj):
-        return {}   # No choice fields in Appliance Report
+        return {}
 
     def get_submission(self, obj):
         if not obj.is_submitted:
             return None
         try:
-            return ApplianceReportReadSerializer(obj.appliance_submission).data
+            return ApplianceReportReadSerializer(
+                obj.appliance_submission, context=self.context
+            ).data
         except ApplianceReportSubmission.DoesNotExist:
             return None
+
+
+APPLIANCE_FORM_FIELDS = [
+    _field('attendance_datetime', 'datetime', required=True,
+           help_text='Date and time of attendance on site'),
+    _field('front_of_property', 'photos',
+           help_text='Photos of the front of the property'),
+    _field('discussion_with_insured', 'textarea',
+           help_text='Notes from discussion with insured'),
+    _field('appliance_brand', 'text',
+           help_text='Brand name of the appliance'),
+    _field('model_no', 'text',
+           help_text='Model number of the appliance'),
+    _field('approx_age', 'text',
+           help_text="Approximate age of the appliance e.g. '5 years'"),
+    _field('conclusion', 'textarea',
+           help_text='Final conclusion and recommendations'),
+    _field('job_photos', 'photos',
+           help_text='General job photos'),
+]
 
 
 class ApplianceReportSubmitSerializer(serializers.ModelSerializer):
@@ -341,8 +378,8 @@ class ApplianceReportSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(ApplianceReportSubmission)
-        RoofReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_property')
-        RoofReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
+        _save_photos(ct, submission.id, front_photos, 'front_of_property')
+        _save_photos(ct, submission.id, job_photos, 'job_photo')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -412,9 +449,35 @@ class DrainInspectionFormSerializer(serializers.Serializer):
         if not obj.is_submitted:
             return None
         try:
-            return DrainInspectionReadSerializer(obj.drain_submission).data
+            return DrainInspectionReadSerializer(
+                obj.drain_submission, context=self.context
+            ).data
         except DrainInspectionSubmission.DoesNotExist:
             return None
+
+
+DRAIN_FORM_FIELDS = [
+    _field('attendance_datetime', 'datetime', required=True,
+           help_text='Date and time of attendance on site'),
+    _field('front_of_dwelling', 'photos',
+           help_text='Photos of the front of the dwelling'),
+    _field('property_construction', 'select', choices=_choices_list(PropertyConstruction),
+           help_text='Type of property construction'),
+    _field('discussion_with_insured', 'textarea',
+           help_text='Notes from discussion with insured'),
+    _field('resultant_damage', 'textarea',
+           help_text='Description of resultant damage'),
+    _field('damage_photos', 'photos',
+           help_text='Photos of damage areas'),
+    _field('area_of_inspection', 'select', choices=_choices_list(AreaOfInspection),
+           help_text='Area being inspected'),
+    _field('pipe_construction', 'select', choices=_choices_list(PipeConstruction),
+           help_text='Type of pipe construction'),
+    _field('conclusion', 'textarea',
+           help_text='Final conclusion and recommendations'),
+    _field('job_photos', 'photos',
+           help_text='General job photos'),
+]
 
 
 class DrainInspectionSubmitSerializer(serializers.ModelSerializer):
@@ -462,9 +525,9 @@ class DrainInspectionSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(DrainInspectionSubmission)
-        RoofReportSubmitSerializer._save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
-        RoofReportSubmitSerializer._save_photos(ct, submission.id, damage_photos, 'damage_photo')
-        RoofReportSubmitSerializer._save_photos(ct, submission.id, job_photos, 'job_photo')
+        _save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
+        _save_photos(ct, submission.id, damage_photos, 'damage_photo')
+        _save_photos(ct, submission.id, job_photos, 'job_photo')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -537,9 +600,63 @@ class LeakInspectionFormSerializer(serializers.Serializer):
         if not obj.is_submitted:
             return None
         try:
-            return LeakInspectionReadSerializer(obj.leak_submission).data
+            return LeakInspectionReadSerializer(
+                obj.leak_submission, context=self.context
+            ).data
         except LeakInspectionSubmission.DoesNotExist:
             return None
+
+
+LEAK_FORM_FIELDS = [
+    _field('attendance_datetime', 'datetime', required=True,
+           help_text='Date and time of attendance on site'),
+    _field('front_of_dwelling', 'photos',
+           help_text='Photos of the front of the dwelling'),
+    _field('property_construction', 'select', choices=_choices_list(PropertyConstruction),
+           help_text='Type of property construction'),
+    _field('discussion_with_site_contact', 'textarea',
+           help_text='Notes from discussion with site contact'),
+    _field('resultant_damage', 'textarea',
+           help_text='Description of resultant damage'),
+    _field('damage_photos', 'photos',
+           help_text='Photos of damage areas'),
+    _field('testing_location', 'select', choices=_choices_list(TestingLocation),
+           help_text='Location being tested'),
+    _field('whole_area_photo', 'photo',
+           help_text='Single photo of the whole area being tested'),
+    _field('pressure_cold_line', 'select', choices=_choices_list(PassFailNA),
+           help_text='Pressure test — cold line'),
+    _field('pressure_hot_line', 'select', choices=_choices_list(PassFailNA),
+           help_text='Pressure test — hot line'),
+    _field('pressure_shower_breech', 'select', choices=_choices_list(PassFailNA),
+           help_text='Pressure test — shower breech/mixer'),
+    _field('pressure_bath_breech', 'select', choices=_choices_list(PassFailNA),
+           help_text='Pressure test — bath breech/mixer'),
+    _field('test_results_photo', 'photo',
+           help_text='Single photo of the pressure test gauge/results'),
+    _field('flood_test_shower', 'select', choices=_choices_list(PassFailNA),
+           help_text='Flood test — shower alcove'),
+    _field('flood_test_bath', 'select', choices=_choices_list(PassFailNA),
+           help_text='Flood test — bath'),
+    _field('spray_test_wall_tiles', 'select', choices=_choices_list(PassFailNA),
+           help_text='Spray test — wall tiles'),
+    _field('spray_test_shower_screen', 'select', choices=_choices_list(PassFailNA),
+           help_text='Spray test — shower screen'),
+    _field('tile_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of tiles'),
+    _field('grout_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of grout'),
+    _field('silicone_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of silicone'),
+    _field('silicone_around_spindles', 'boolean',
+           help_text='Is silicone present around spindles and penetrations?'),
+    _field('spindle_photos', 'photos',
+           help_text='Photos of spindles/mixers'),
+    _field('conclusion', 'textarea',
+           help_text='Final conclusion and recommendations'),
+    _field('job_photos', 'photos',
+           help_text='General job photos'),
+]
 
 
 class LeakInspectionSubmitSerializer(serializers.ModelSerializer):
@@ -593,7 +710,6 @@ class LeakInspectionSubmitSerializer(serializers.ModelSerializer):
         test_results_photo = validated_data.pop('test_results_photo', None)
         spindle_photos = validated_data.pop('spindle_photos', [])
         job_photos = validated_data.pop('job_photos', [])
-
         job_report = self.context['job_report']
         user = self.context['request'].user
 
@@ -604,15 +720,14 @@ class LeakInspectionSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(LeakInspectionSubmission)
-        save = RoofReportSubmitSerializer._save_photos
-        save(ct, submission.id, front_photos, 'front_of_dwelling')
-        save(ct, submission.id, damage_photos, 'damage_photo')
-        save(ct, submission.id, spindle_photos, 'spindle_photo')
-        save(ct, submission.id, job_photos, 'job_photo')
+        _save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
+        _save_photos(ct, submission.id, damage_photos, 'damage_photo')
+        _save_photos(ct, submission.id, spindle_photos, 'spindle_photo')
+        _save_photos(ct, submission.id, job_photos, 'job_photo')
         if whole_area_photo:
-            save(ct, submission.id, [whole_area_photo], 'whole_area')
+            _save_photos(ct, submission.id, [whole_area_photo], 'whole_area')
         if test_results_photo:
-            save(ct, submission.id, [test_results_photo], 'test_results')
+            _save_photos(ct, submission.id, [test_results_photo], 'test_results')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -689,9 +804,53 @@ class SprayTestFormSerializer(serializers.Serializer):
         if not obj.is_submitted:
             return None
         try:
-            return SprayTestReadSerializer(obj.spray_submission).data
+            return SprayTestReadSerializer(obj.spray_submission, context=self.context).data
         except SprayTestSubmission.DoesNotExist:
             return None
+
+
+SPRAY_FORM_FIELDS = [
+    _field('attendance_datetime', 'datetime', required=True,
+           help_text='Date and time of attendance on site'),
+    _field('front_of_dwelling', 'photos',
+           help_text='Photos of the front of the dwelling'),
+    _field('property_construction', 'select', choices=_choices_list(PropertyConstruction),
+           help_text='Type of property construction'),
+    _field('discussion_with_insured', 'textarea',
+           help_text='Notes from discussion with insured'),
+    _field('resultant_damage', 'textarea',
+           help_text='Description of resultant damage'),
+    _field('damage_photos', 'photos',
+           help_text='Photos of damage areas'),
+    _field('testing_location', 'select', choices=_choices_list(SprayTestLocation),
+           help_text='Location being tested'),
+    _field('whole_area_photo', 'photo',
+           help_text='Single photo of the whole area'),
+    _field('flood_test', 'select', choices=_choices_list(PassFailNA),
+           help_text='Flood test result'),
+    _field('flood_test_notes', 'textarea',
+           help_text='Notes on the flood test'),
+    _field('spray_test', 'select', choices=_choices_list(PassFailNA),
+           help_text='Spray test result'),
+    _field('spray_test_notes', 'textarea',
+           help_text='Notes on the spray test'),
+    _field('tile_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of tiles'),
+    _field('tile_condition_notes', 'textarea',
+           help_text='Notes on tile condition'),
+    _field('grout_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of grout'),
+    _field('grout_condition_notes', 'textarea',
+           help_text='Notes on grout condition'),
+    _field('silicone_condition', 'select', choices=_choices_list(ConditionRating),
+           help_text='Condition rating of silicone'),
+    _field('silicone_condition_notes', 'textarea',
+           help_text='Notes on silicone condition'),
+    _field('conclusion', 'textarea',
+           help_text='Final conclusion and recommendations'),
+    _field('job_photos', 'photos',
+           help_text='General job photos'),
+]
 
 
 class SprayTestSubmitSerializer(serializers.ModelSerializer):
@@ -736,7 +895,6 @@ class SprayTestSubmitSerializer(serializers.ModelSerializer):
         damage_photos = validated_data.pop('damage_photos', [])
         whole_area_photo = validated_data.pop('whole_area_photo', None)
         job_photos = validated_data.pop('job_photos', [])
-
         job_report = self.context['job_report']
         user = self.context['request'].user
 
@@ -747,12 +905,11 @@ class SprayTestSubmitSerializer(serializers.ModelSerializer):
             **validated_data
         )
         ct = ContentType.objects.get_for_model(SprayTestSubmission)
-        save = RoofReportSubmitSerializer._save_photos
-        save(ct, submission.id, front_photos, 'front_of_dwelling')
-        save(ct, submission.id, damage_photos, 'damage_photo')
-        save(ct, submission.id, job_photos, 'job_photo')
+        _save_photos(ct, submission.id, front_photos, 'front_of_dwelling')
+        _save_photos(ct, submission.id, damage_photos, 'damage_photo')
+        _save_photos(ct, submission.id, job_photos, 'job_photo')
         if whole_area_photo:
-            save(ct, submission.id, [whole_area_photo], 'whole_area')
+            _save_photos(ct, submission.id, [whole_area_photo], 'whole_area')
 
         job_report.is_submitted = True
         job_report.submitted_by = user
@@ -790,3 +947,14 @@ class SprayTestReadSerializer(serializers.ModelSerializer):
             url = request.build_absolute_uri(photo.image.url) if request and photo.image else None
             result.setdefault(photo.photo_type, []).append({'id': str(photo.id), 'url': url})
         return result
+
+
+# ==================== FORM FIELDS REGISTRY ====================
+
+FORM_FIELDS_REGISTRY = {
+    ReportType.ROOF: ROOF_FORM_FIELDS,
+    ReportType.APPLIANCE: APPLIANCE_FORM_FIELDS,
+    ReportType.DRAIN_INSPECTION: DRAIN_FORM_FIELDS,
+    ReportType.LEAK_INSPECTION: LEAK_FORM_FIELDS,
+    ReportType.SPRAY_TEST: SPRAY_FORM_FIELDS,
+}

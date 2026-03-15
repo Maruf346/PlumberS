@@ -18,7 +18,7 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
 from reports.models import (
     ReportPhoto, ReportType,
-    RootReportSubmission, ApplianceReportSubmission,
+    RoofReportSubmission, ApplianceReportSubmission,
     DrainInspectionSubmission, LeakInspectionSubmission,
     SprayTestSubmission,
 )
@@ -258,7 +258,7 @@ def _footer(canvas, doc):
 
 # ==================== REPORT BUILDERS ====================
 
-def _build_root_report(job_report, submission):
+def _build_roof_report(job_report, submission):
     story = []
     snap = submission.snapshot
     s = _styles()
@@ -306,7 +306,7 @@ def _build_root_report(job_report, submission):
     ]))
 
     # Front of dwelling photos
-    front_photos = list(_get_photos(RootReportSubmission, submission.id, 'front_of_dwelling'))
+    front_photos = list(_get_photos(RoofReportSubmission, submission.id, 'front_of_dwelling'))
     if front_photos:
         story.append(Spacer(1, 6))
         story.append(Paragraph('Front of Dwelling', s['label']))
@@ -317,7 +317,7 @@ def _build_root_report(job_report, submission):
     story.append(_section_heading('Resulting Damages'))
     story.append(_divider())
     story.append(_text_block('', submission.resulting_damages))
-    damage_photos = list(_get_photos(RootReportSubmission, submission.id, 'damage_photo'))
+    damage_photos = list(_get_photos(RoofReportSubmission, submission.id, 'damage_photo'))
     if damage_photos:
         story.append(Spacer(1, 6))
         story.append(Paragraph('Photos of Resulting Damages', s['label']))
@@ -350,7 +350,7 @@ def _build_root_report(job_report, submission):
     story.append(Spacer(1, 8))
 
     # Job photos
-    job_photos = list(_get_photos(RootReportSubmission, submission.id, 'job_photo'))
+    job_photos = list(_get_photos(RoofReportSubmission, submission.id, 'job_photo'))
     if job_photos:
         story.append(_section_heading('Job Photos'))
         story.append(_divider())
@@ -736,7 +736,7 @@ def _build_spray_test(job_report, submission):
 # ==================== MAIN ENTRY POINT ====================
 
 _BUILDERS = {
-    ReportType.ROOT: _build_root_report,
+    ReportType.ROOF: _build_roof_report,
     ReportType.APPLIANCE: _build_appliance_report,
     ReportType.DRAIN_INSPECTION: _build_drain_inspection,
     ReportType.LEAK_INSPECTION: _build_leak_inspection,

@@ -2,29 +2,37 @@ from django.urls import path
 from .views import (
     ReportTypeListView,
     JobReportListView,
+    ReportFormFieldsView,
     ReportFormView,
-    ReportSubmitView,
     ReportSubmissionView,
     ReportDownloadView,
+    # Typed submit views — one per report type
+    RoofReportSubmitView,
+    ApplianceReportSubmitView,
+    DrainInspectionSubmitView,
+    LeakInspectionSubmitView,
+    SprayTestSubmitView,
 )
 
 urlpatterns = [
-    # ── Admin: available report type choices (for job creation form) ──────────
+    # ── Admin: available report type choices ──────────────────────────────────
     path('types/', ReportTypeListView.as_view(), name='report-types'),
 
-    # ── Admin: all reports for a specific job ─────────────────────────────────
-    # Mounted under jobs router: /api/jobs/{job_id}/reports/
-    # This view is registered in jobs/urls.py — see below.
-
-    # ── Employee + Admin: per-report-record endpoints ─────────────────────────
+    # ── Read endpoints — unchanged ────────────────────────────────────────────
+    path('<uuid:job_report_id>/formfields/', ReportFormFieldsView.as_view(), name='report-formfields'),
     path('<uuid:job_report_id>/form/', ReportFormView.as_view(), name='report-form'),
-    path('<uuid:job_report_id>/submit/', ReportSubmitView.as_view(), name='report-submit'),
     path('<uuid:job_report_id>/submission/', ReportSubmissionView.as_view(), name='report-submission'),
     path('<uuid:job_report_id>/download/', ReportDownloadView.as_view(), name='report-download'),
+
+    # ── Typed submit endpoints — one per report type ──────────────────────────
+    # Generic /submit/ removed. Use the specific endpoint for your report type.
+    # The correct submit_url is returned by /formfields/ automatically.
+    path('<uuid:job_report_id>/submit/roof/', RoofReportSubmitView.as_view(), name='report-submit-roof'),
+    path('<uuid:job_report_id>/submit/appliance/', ApplianceReportSubmitView.as_view(), name='report-submit-appliance'),
+    path('<uuid:job_report_id>/submit/drain/', DrainInspectionSubmitView.as_view(), name='report-submit-drain'),
+    path('<uuid:job_report_id>/submit/leak/', LeakInspectionSubmitView.as_view(), name='report-submit-leak'),
+    path('<uuid:job_report_id>/submit/spray/', SprayTestSubmitView.as_view(), name='report-submit-spray'),
 ]
 
-# ── Note on JobReportListView ─────────────────────────────────────────────────
-# JobReportListView is mounted in core/urls.py under the jobs prefix:
-#   path('api/jobs/<uuid:job_id>/reports/', JobReportListView.as_view(), ...)
-# This keeps the URL structure logical (/jobs/{id}/reports/) while the
-# view lives in the reports app where it belongs.
+# ── Note: JobReportListView is registered in core/urls.py ─────────────────────
+# path('api/jobs/<uuid:job_id>/reports/', JobReportListView.as_view(), name='job-reports')
