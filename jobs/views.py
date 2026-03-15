@@ -237,7 +237,18 @@ class JobScheduleView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
-        
+
+        # Instant restore on reschedule — no waiting for Celery
+        if job.status == JobStatus.OVERDUE and job.scheduled_datetime > timezone.now():
+            restore_to = job.pre_overdue_status or JobStatus.PENDING
+            job.status = restore_to
+            job.pre_overdue_status = None
+            job.save(update_fields=['status', 'pre_overdue_status'])
+            _log_activity(
+                job, ActivityType.STATUS_CHANGED, request.user,
+                f"Status restored to {restore_to} after reschedule"
+            )
+
         # Notify assigned employee about the reschedule
         try:
             from notifications.services import NotificationTemplates
@@ -245,7 +256,7 @@ class JobScheduleView(APIView):
                 NotificationTemplates.job_rescheduled(job.assigned_to, job)
         except Exception:
             pass
-    
+
         return Response(
             {'message': 'Job rescheduled.', 'data': JobDetailSerializer(job).data},
             status=status.HTTP_200_OK

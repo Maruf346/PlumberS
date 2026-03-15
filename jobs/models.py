@@ -66,6 +66,14 @@ class Job(models.Model):
         choices=JobStatus.choices,
         default=JobStatus.PENDING
     )
+    pre_overdue_status = models.CharField(
+        max_length=20,
+        choices=JobStatus.choices,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Stores the status before the job became overdue, used to restore on reschedule"
+    )
     priority = models.CharField(
         max_length=10,
         choices=JobPriority.choices,
