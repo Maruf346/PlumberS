@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+# import datetime
 from datetime import timedelta
 from django.http import FileResponse
 
@@ -49,11 +50,20 @@ class JobDashboardView(APIView):
 
     @extend_schema(tags=['jobs'], summary="Job dashboard summary")
     def get(self, request):
-        today = timezone.now().date()
+        now = timezone.now()
+        today = now.date()
+
+        # Build range using timedelta — no make_aware needed
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
         jobs = Job.objects.all()
 
         active = jobs.filter(status=JobStatus.IN_PROGRESS).count()
-        jobs_today = jobs.filter(scheduled_datetime__date=today).count()
+        jobs_today = jobs.filter(
+            scheduled_datetime__gte=today_start,
+            scheduled_datetime__lte=today_end
+        ).count()
         pending = jobs.filter(status=JobStatus.PENDING).count()
         completed = jobs.filter(status=JobStatus.COMPLETED).count()
         overdue = jobs.filter(status=JobStatus.OVERDUE).count()
@@ -238,18 +248,33 @@ class JobScheduleView(APIView):
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
 
-        # Instant restore on reschedule — no waiting for Celery
-        if job.status == JobStatus.OVERDUE and job.scheduled_datetime > timezone.now():
-            restore_to = job.pre_overdue_status or JobStatus.PENDING
-            job.status = restore_to
-            job.pre_overdue_status = None
-            job.save(update_fields=['status', 'pre_overdue_status'])
-            _log_activity(
-                job, ActivityType.STATUS_CHANGED, request.user,
-                f"Status restored to {restore_to} after reschedule"
-            )
+        now = timezone.now()
 
-        # Notify assigned employee about the reschedule
+        if job.scheduled_datetime and job.scheduled_datetime <= now:
+            # New date is still in the past — mark/keep as OVERDUE immediately
+            if job.status != JobStatus.OVERDUE:
+                job.pre_overdue_status = job.status
+                job.status = JobStatus.OVERDUE
+                job.save(update_fields=['status', 'pre_overdue_status'])
+                _log_activity(
+                    job, ActivityType.STATUS_CHANGED, request.user,
+                    "Rescheduled to a past date — marked overdue immediately"
+                )
+            # If already OVERDUE, nothing changes — just log the reschedule
+
+        elif job.scheduled_datetime and job.scheduled_datetime > now:
+            # New date is in the future — restore from OVERDUE
+            if job.status == JobStatus.OVERDUE:
+                restore_to = job.pre_overdue_status or JobStatus.PENDING
+                job.status = restore_to
+                job.pre_overdue_status = None
+                job.save(update_fields=['status', 'pre_overdue_status'])
+                _log_activity(
+                    job, ActivityType.STATUS_CHANGED, request.user,
+                    f"Status restored to {restore_to} after reschedule to future date"
+                )
+
+        # Notify assigned employee
         try:
             from notifications.services import NotificationTemplates
             if job.assigned_to:
