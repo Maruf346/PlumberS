@@ -161,7 +161,7 @@ class ReportTypeListView(APIView):
 # ==================== ADMIN — REPORTS FOR A JOB ====================
 
 class JobReportListView(ListAPIView):
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [IsAuthenticated]  # Permission logic inside get_queryset
     serializer_class = JobReportListSerializer
 
     def get_queryset(self):

@@ -107,6 +107,7 @@ class AdminClientListView(ListAPIView):
     filterset_fields = ['is_active']
     ordering_fields = ['name', 'created_at']
     ordering = ['name']
+    search_fields = ['name', 'email']
 
     def get_queryset(self):
         return Client.objects.all()
