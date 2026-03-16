@@ -17,7 +17,7 @@ from .models import (
     JobStatus, JobPriority, ActivityType,
     # JobPhoto,   # commented out
     # JobTask,    # commented out
-    # JobNote,    # commented out
+    JobNote, 
 )
 from .serializers import (
     JobListSerializer, JobDetailSerializer, JobWriteSerializer,
@@ -27,8 +27,8 @@ from .serializers import (
     EmployeeJobListResponseSerializer, EmployeeCalendarJobsSerializer, RecentActivitySerializer,
     # JobPhotoSerializer,      # commented out
     # JobTaskSerializer,       # commented out
-    # JobNoteSerializer,       # commented out
-    # JobNoteCreateSerializer, # commented out
+    JobNoteSerializer, 
+    JobNoteCreateSerializer,
 )
 from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
 
@@ -462,9 +462,123 @@ class JobLineItemDetailView(APIView):
 # class JobTaskCompleteView(APIView): ...
 
 
-# ── Job Note Views — commented out (chat feature deferred to WebSocket phase) ─
-# class JobNoteListView(ListAPIView): ...
-# class JobNoteCreateView(APIView): ...
+# ── Job Note Views (chat feature deferred to WebSocket phase) ─
+class JobNoteListView(APIView):
+    """
+    GET  /api/jobs/{id}/notes/
+    List all notes for a job, oldest first (natural chat order).
+
+    Access rules:
+    - Employee: only their assigned job
+    - Admin / Manager: any job
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-notes'],
+        summary="List job notes",
+        description=(
+            "Returns all notes for a job in chronological order. "
+            "Each note includes sender_role ('admin'/'manager'/'employee') and "
+            "is_mine (bool) so the frontend can render left/right chat bubbles."
+        ),
+        responses={200: JobNoteSerializer(many=True)},
+    )
+    def get(self, request, id):
+        job = self._get_job(request, id)
+        notes = JobNote.objects.filter(job=job).select_related('sender')
+        serializer = JobNoteSerializer(notes, many=True, context={'request': request})
+        return Response({
+            'job_id': job.job_id,
+            'count': len(serializer.data),
+            'notes': serializer.data,
+        }, status=status.HTTP_200_OK)
+
+    def _get_job(self, request, id):
+        user = request.user
+        if user.is_superuser or user.is_staff:
+            return get_object_or_404(Job, id=id)
+        # Employee can only see notes on their own job
+        return get_object_or_404(Job, id=id, assigned_to=user)
+
+
+class JobNoteSendView(APIView):
+    """
+    POST /api/jobs/{id}/notes/send/
+    Send a note on a job.
+
+    Access rules:
+    - Employee: only on their assigned job
+    - Admin / Manager: any job
+    Both sides use the same endpoint.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-notes'],
+        summary="Send job note",
+        description=(
+            "Send a message/note on a job thread. "
+            "Both employee and admin/manager use this same endpoint. "
+            "Returns the created note so the frontend can append it immediately."
+        ),
+        request=JobNoteCreateSerializer,
+        responses={201: JobNoteSerializer},
+    )
+    def post(self, request, id):
+        # Resolve job with access check
+        user = request.user
+        if user.is_superuser or user.is_staff:
+            job = get_object_or_404(Job, id=id)
+        else:
+            job = get_object_or_404(Job, id=id, assigned_to=user)
+
+        serializer = JobNoteCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        note = JobNote.objects.create(
+            job=job,
+            sender=request.user,
+            message=serializer.validated_data['message']
+        )
+
+        _log_activity(job, ActivityType.NOTE_ADDED, request.user,
+                      f"Note added by {request.user.full_name}")
+
+        return Response(
+            JobNoteSerializer(note, context={'request': request}).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class JobNoteDeleteView(APIView):
+    """
+    DELETE /api/jobs/{id}/notes/{note_id}/
+    Admin/manager can delete any note.
+    Employee can only delete their own notes.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-notes'],
+        summary="Delete a job note",
+        responses={204: None},
+    )
+    def delete(self, request, id, note_id):
+        note = get_object_or_404(JobNote, id=note_id, job__id=id)
+        user = request.user
+
+        # Admin/manager can delete anything
+        # Employee can only delete their own notes
+        if not (user.is_superuser or user.is_staff):
+            if note.sender != user:
+                return Response(
+                    {'error': 'You can only delete your own notes.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        note.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ==================== ACTIVITY LOG ====================

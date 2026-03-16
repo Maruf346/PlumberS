@@ -598,7 +598,7 @@ class ManagerListView(ListAPIView):
     filterset_fields = ['is_active', 'provider']
     ordering_fields = ['created_at', 'email', 'full_name']
     ordering = ['-created_at']
-    searching_fields = ['full_name', 'email']
+    search_fields = ['full_name', 'email']
 
 
 class AdminManagerDetailView(RetrieveAPIView):

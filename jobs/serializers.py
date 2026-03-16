@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from .models import (
-    Job, JobAttachment, JobLineItem, JobActivity,
+    Job, JobAttachment, JobLineItem, JobActivity, JobNote,
     JobStatus, JobPriority, ActivityType,
     # JobPhoto,   # commented out — photos now in reports app
     # JobTask,    # commented out — tasks feature deferred
@@ -61,23 +61,55 @@ class JobLineItemSerializer(serializers.ModelSerializer):
 #         read_only_fields = ['id', 'completed_by', 'completed_by_name', 'completed_at']
 
 
-# ── JobNoteSerializer — commented out ────────────────────────────────────────
-# class JobNoteSerializer(serializers.ModelSerializer):
-#     sender_name = serializers.CharField(source='sender.full_name', read_only=True)
-#     sender_role = serializers.CharField(source='sender.role', read_only=True)
-#     class Meta:
-#         model = JobNote
-#         fields = [
-#             'id', 'sender', 'sender_name', 'sender_role',
-#             'message', 'is_system_message', 'created_at'
-#         ]
-#         read_only_fields = ['id', 'sender', 'sender_name', 'sender_role',
-#                             'is_system_message', 'created_at']
-#
-# class JobNoteCreateSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = JobNote
-#         fields = ['message']
+# ── JobNoteSerializer ────────────────────────────────────────
+class JobNoteSerializer(serializers.ModelSerializer):
+    """Read serializer — used in list responses."""
+    sender_name = serializers.CharField(source='sender.full_name', read_only=True)
+    sender_role = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobNote
+        fields = [
+            'id',
+            'sender',
+            'sender_name',
+            'sender_role',
+            'message',
+            'is_mine',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_sender_role(self, obj):
+        """Returns 'admin', 'manager', or 'employee' — frontend uses this to align bubbles."""
+        if not obj.sender:
+            return 'unknown'
+        if obj.sender.is_superuser:
+            return 'admin'
+        if obj.sender.is_staff:
+            return 'manager'
+        return 'employee'
+
+    def get_is_mine(self, obj):
+        """True if the requesting user sent this message — frontend uses to show right/left bubble."""
+        request = self.context.get('request')
+        if not request or not obj.sender:
+            return False
+        return obj.sender.id == request.user.id
+
+
+class JobNoteCreateSerializer(serializers.Serializer):
+    """Write serializer — only accepts the message text."""
+    message = serializers.CharField(
+        min_length=1,
+        max_length=2000,
+        trim_whitespace=True,
+        error_messages={
+            'blank': 'Message cannot be empty.',
+            'max_length': 'Message cannot exceed 2000 characters.',
+        }
+    )
 
 
 # ==================== ASSIGNED USER SERIALIZERS ====================

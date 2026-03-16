@@ -288,26 +288,36 @@ class JobLineItem(models.Model):
 #         ordering = ['order']
 
 
-# ── JobNote — commented out; chat feature deferred (WebSocket phase) ─────────
-# class JobNote(models.Model):
-#     """Per-job messaging thread between employee and admin/manager."""
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='notes')
-#     sender = models.ForeignKey(
-#         settings.AUTH_USER_MODEL,
-#         on_delete=models.SET_NULL,
-#         null=True,
-#         related_name='job_notes'
-#     )
-#     message = models.TextField()
-#     is_system_message = models.BooleanField(default=False)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#
-#     def __str__(self):
-#         return f"{self.job.job_id} — {self.sender} at {self.created_at}"
-#
-#     class Meta:
-#         ordering = ['created_at']
+# ── Add this back to jobs/models.py ──────────────────────────────────────────
+# Place it after JobLineItem, before JobActivity
+
+
+class JobNote(models.Model):
+    """
+    Per-job ticket-style communication between assigned employee and admin/manager.
+    No WebSocket — simple POST to send, GET to list. Ordered oldest-first so it
+    renders like a chat thread.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name='notes'
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='job_notes'
+    )
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.job.job_id} — {self.sender} at {self.created_at}"
+
+    class Meta:
+        ordering = ['created_at']   # oldest first → natural chat order
 
 
 class JobActivity(models.Model):

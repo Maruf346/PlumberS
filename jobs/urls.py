@@ -33,9 +33,10 @@ urlpatterns = [
     # path('<uuid:id>/tasks/', JobTaskView.as_view(), name='job-task'),
     # path('<uuid:id>/tasks/<uuid:task_id>/complete/', JobTaskCompleteView.as_view(), name='job-task-complete'),
 
-    # ── Notes/chat — commented out (deferred to WebSocket phase) ─────────────
-    # path('<uuid:id>/notes/', JobNoteListView.as_view(), name='job-note-list'),
-    # path('<uuid:id>/notes/send/', JobNoteCreateView.as_view(), name='job-note-create'),
+    # ── Notes / ticket thread ─────────────
+    path('<uuid:id>/notes/', JobNoteListView.as_view(), name='job-note-list'),
+    path('<uuid:id>/notes/send/', JobNoteSendView.as_view(), name='job-note-send'),
+    path('<uuid:id>/notes/<uuid:note_id>/', JobNoteDeleteView.as_view(), name='job-note-delete'),
 
     # ── Activity timeline ─────────────────────────────────────────────────────
     path('<uuid:id>/activity/', JobActivityListView.as_view(), name='job-activity'),
