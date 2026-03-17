@@ -43,6 +43,7 @@ urlpatterns = [
     path('activities/recent/', RecentActivityView.as_view(), name='job-activity-recent'),
 
     # ── Mobile / Employee UI endpoints ───────────────────────────────────────
+    path('employee/my-vehicles/', EmployeeVehicleListView.as_view(), name='employee-my-vehicles'),
     path('employee/my-jobs/', EmployeeMyJobsView.as_view(), name='employee-my-jobs'),
     path('employee/calendar/', EmployeeCalendarJobsView.as_view(), name='employee-calendar-jobs'),
     path('employee/<uuid:id>/', EmployeeJobDetailByIdView.as_view(), name='employee-job-detail-by-id'),

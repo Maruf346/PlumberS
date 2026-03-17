@@ -20,7 +20,7 @@ from .models import (
     JobNote, 
 )
 from .serializers import (
-    JobListSerializer, JobDetailSerializer, JobWriteSerializer,
+    EmployeeVehicleSerializer, JobListSerializer, JobDetailSerializer, JobWriteSerializer,
     JobScheduleSerializer, JobStatusUpdateSerializer, JobDashboardSerializer,
     JobAttachmentSerializer, JobLineItemSerializer, JobActivitySerializer,
     JobMinimalSerializer, EmployeeJobDetailSerializer,
@@ -846,3 +846,51 @@ class RecentActivityView(APIView):
             .order_by('-created_at')[:5]
         )
         return Response(RecentActivitySerializer(activities, many=True).data)
+    
+    
+class EmployeeVehicleListView(APIView):
+    """
+    GET /api/jobs/employee/my-vehicles/
+ 
+    Returns unique vehicles from the requesting employee's assigned jobs.
+    If two jobs share the same vehicle it appears only once.
+ 
+    Employee → only vehicles from their own jobs.
+    Admin/Manager → all vehicles across all jobs.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+ 
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="My vehicles",
+        description=(
+            "Returns unique vehicles attached to the employee's assigned jobs. "
+            "Fields: id, name, plate, picture, status, next_service, last_inspection_date."
+        ),
+    )
+    def get(self, request):
+        from fleets.models import Vehicle as VehicleModel
+ 
+        user = request.user
+ 
+        if user.is_superuser or user.is_staff:
+            jobs_qs = Job.objects.select_related('vehicle').exclude(vehicle__isnull=True)
+        else:
+            jobs_qs = Job.objects.filter(
+                assigned_to=user
+            ).select_related('vehicle').exclude(vehicle__isnull=True)
+ 
+        # Collect unique vehicle IDs from the jobs
+        vehicle_ids = list(
+            jobs_qs.values_list('vehicle_id', flat=True).distinct()
+        )
+ 
+        # Single query with inspection prefetch — no N+1
+        vehicles = VehicleModel.objects.filter(
+            id__in=vehicle_ids
+        ).prefetch_related('inspections').order_by('name')
+ 
+        serializer = EmployeeVehicleSerializer(
+            vehicles, many=True, context={'request': request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)    

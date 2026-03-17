@@ -964,7 +964,7 @@ class EmployeeCertificateSerializer(ModelSerializer):
         ]
 
 
-class EmployeeProfileSerializer(ModelSerializer):
+class EmployeeProfileSerializer2(ModelSerializer):
     emergency_contact = EmergencyContactSerializer(read_only=True)  # if you have one, else remove
 
     class Meta:

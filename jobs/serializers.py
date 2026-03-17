@@ -590,3 +590,42 @@ class RecentActivitySerializer(serializers.ModelSerializer):
             return f'{hours} hr ago'
         days = hours // 24
         return f'{days} day{"s" if days != 1 else ""} ago'
+    
+    
+class EmployeeVehicleSerializer(serializers.Serializer):
+    """
+    Unique vehicles from the employee's assigned jobs.
+    Fields: id, name, plate, picture, last_inspection_date, status, next_service.
+    """
+    id = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    plate = serializers.SerializerMethodField()
+    picture = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    next_service = serializers.SerializerMethodField()
+    last_inspection_date = serializers.SerializerMethodField()
+ 
+    def get_id(self, obj):
+        return str(obj.id)
+ 
+    def get_name(self, obj):
+        return obj.name
+ 
+    def get_plate(self, obj):
+        return obj.plate
+ 
+    def get_picture(self, obj):
+        request = self.context.get('request')
+        if obj.picture and request:
+            return request.build_absolute_uri(obj.picture.url)
+        return None
+ 
+    def get_status(self, obj):
+        return obj.status
+ 
+    def get_next_service(self, obj):
+        return obj.next_service_km
+ 
+    def get_last_inspection_date(self, obj):
+        inspection = obj.inspections.order_by('-inspected_at').first()
+        return inspection.inspected_at if inspection else None    
