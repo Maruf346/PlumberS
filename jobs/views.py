@@ -679,6 +679,68 @@ class EmployeeCalendarJobsView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class EmployeeJobsByDateView(APIView):
+    """
+    GET /api/jobs/employee/jobs-by-date/
+
+    Returns the employee's jobs filtered by a specific date.
+    Date param is date only — time part is ignored.
+
+    Query param:
+        date=YYYY-MM-DD   e.g. ?date=2026-03-18
+
+    Employee → only their assigned jobs.
+    Admin/Manager → all jobs on that date.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="My jobs by date",
+        description=(
+            "Filter employee jobs by a specific date. "
+            "Pass date as YYYY-MM-DD — time part is ignored. "
+            "Returns all jobs whose scheduled_datetime falls on that date."
+        ),
+        parameters=[
+            OpenApiParameter(
+                'date',
+                str,
+                required=False,
+                description='Filter date in YYYY-MM-DD format. Omit to get all jobs.'
+            ),
+        ],
+        responses={200: JobMinimalSerializer(many=True)},
+    )
+    def get(self, request):
+        user = request.user
+
+        if user.is_superuser or user.is_staff:
+            qs = Job.objects.select_related('client', 'vehicle').all()
+        else:
+            qs = Job.objects.filter(
+                assigned_to=user
+            ).select_related('client', 'vehicle')
+
+        date_param = request.query_params.get('date')
+
+        if date_param:
+            # Validate and parse — date only, time is irrelevant
+            from datetime import date as date_type
+            try:
+                parsed = date_type.fromisoformat(date_param)  # expects YYYY-MM-DD
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD e.g. 2026-03-18'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            qs = qs.filter(scheduled_datetime__date=parsed)
+
+        qs = qs.order_by('scheduled_datetime')
+        serializer = JobMinimalSerializer(qs, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class EmployeeJobDetailByIdView(RetrieveAPIView):
     """Full job detail for employee by job UUID."""
     permission_classes = [IsAdminOrManagerOrEmployee]

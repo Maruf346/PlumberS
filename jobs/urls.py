@@ -46,6 +46,7 @@ urlpatterns = [
     path('employee/my-vehicles/', EmployeeVehicleListView.as_view(), name='employee-my-vehicles'),
     path('employee/my-jobs/', EmployeeMyJobsView.as_view(), name='employee-my-jobs'),
     path('employee/calendar/', EmployeeCalendarJobsView.as_view(), name='employee-calendar-jobs'),
+    path('employee/jobs-by-date/', EmployeeJobsByDateView.as_view(), name='employee-jobs-by-date'),
     path('employee/<uuid:id>/', EmployeeJobDetailByIdView.as_view(), name='employee-job-detail-by-id'),
     path('employee/<uuid:id>/start/', EmployeeStartJobView.as_view(), name='employee-job-start'),
     path('employee/<uuid:id>/complete/', EmployeeCompleteJobView.as_view(), name='employee-job-complete'),
