@@ -152,15 +152,22 @@ class Job(models.Model):
 
     @staticmethod
     def _generate_job_id():
-        last = Job.objects.filter(
-            job_id__startswith='JB-'
-        ).order_by('-id').first()
-        if last:
+        from django.db.models import Max
+
+        rows = Job.objects.filter(job_id__startswith='JB-').values_list('job_id', flat=True)
+
+        max_num = 1000  # starting point
+        for job_id in rows:
             try:
-                last_num = int(last.job_id.split('-')[1])
-                return f"JB-{last_num + 1}"
+                num = int(job_id.split('-')[1])
+                if num > max_num:
+                    max_num = num
             except (IndexError, ValueError):
-                pass
+                continue
+
+        # If any rows exist, increment; otherwise start at 1001
+        if rows.exists():
+            return f"JB-{max_num + 1}"
         return "JB-1001"
 
     def check_overdue(self):
