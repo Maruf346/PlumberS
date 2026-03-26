@@ -445,6 +445,33 @@ class JobStatusUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class AdminJobStatusUpdateSerializer(serializers.ModelSerializer):
+    """Admin forces a job to any status directly."""
+    class Meta:
+        model = Job
+        fields = ['status']
+
+    def validate_status(self, value):
+        if value not in [s[0] for s in JobStatus.choices]:
+            raise serializers.ValidationError(
+                f'Invalid status. Valid choices: {[s[0] for s in JobStatus.choices]}'
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        old_status = instance.status
+        new_status = validated_data['status']
+        instance.status = new_status
+        instance.save()
+
+        JobActivity.objects.create(
+            job=instance,
+            activity_type=ActivityType.STATUS_CHANGED,
+            actor=self.context['request'].user,
+            description=f"Status manually changed from {old_status} to {new_status} by admin"
+        )
+        return instance
+
 class JobDashboardSerializer(serializers.Serializer):
     """Summary counts for the admin/manager dashboard."""
     total_jobs = serializers.IntegerField()

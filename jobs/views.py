@@ -20,7 +20,7 @@ from .models import (
     JobNote, 
 )
 from .serializers import (
-    EmployeeVehicleSerializer, JobListSerializer, JobDetailSerializer, JobWriteSerializer,
+    AdminJobStatusUpdateSerializer, EmployeeVehicleSerializer, JobListSerializer, JobDetailSerializer, JobWriteSerializer,
     JobScheduleSerializer, JobStatusUpdateSerializer, JobDashboardSerializer,
     JobAttachmentSerializer, JobLineItemSerializer, JobActivitySerializer,
     JobMinimalSerializer, EmployeeJobDetailSerializer,
@@ -229,6 +229,48 @@ class AdminJobUpdateView(APIView):
         job.delete()
         return Response({'message': 'Job deleted.'}, status=status.HTTP_204_NO_CONTENT)
 
+
+class AdminJobStatusUpdateView(APIView):
+    """
+    PATCH /api/jobs/{id}/admin-status/
+    Admin forces a job to any status directly.
+    No transition rules — full control.
+    """
+    permission_classes = [IsAdminOrManager]
+
+    @extend_schema(
+        tags=['jobs'],
+        summary="Admin — force update job status",
+        description=(
+            "Allows admin or manager to set a job to any status directly. "
+            "No transition restrictions. Logs the change to the activity timeline."
+        ),
+        request=AdminJobStatusUpdateSerializer,
+        responses={200: JobDetailSerializer},
+    )
+    def patch(self, request, id):
+        job = get_object_or_404(Job, id=id)
+        serializer = AdminJobStatusUpdateSerializer(
+            job,
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        job = serializer.save()
+
+        # Notify assigned employee if they exist
+        try:
+            from notifications.services import NotificationTemplates
+            if job.assigned_to:
+                NotificationTemplates.job_updated(job.assigned_to, job)
+        except Exception:
+            pass
+
+        return Response(
+            {'message': f'Job status updated to {job.status}.', 'data': JobDetailSerializer(job).data},
+            status=status.HTTP_200_OK
+        )
+        
 
 class JobScheduleView(APIView):
     """Dedicated for drag-and-drop calendar rescheduling."""
