@@ -164,6 +164,15 @@ class EmployeeProfile(models.Model):
         help_text="Upload driving license (PDF or image)"
     )
 
+    assigned_vehicle = models.ForeignKey(
+        'fleets.Vehicle',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_employee',
+        help_text="Vehicle dedicated to this employee by admin"
+    )
+    
     # Onboarding tracking
     onboarding_complete = models.BooleanField(default=False)
 

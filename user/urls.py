@@ -53,6 +53,14 @@ urlpatterns = [
     path('me/employee-profile/', MyEmployeeProfileView.as_view(), name='my-employee-profile'),
     path('me/employee-profile/update/', MyEmployeeProfileUpdateView.as_view(), name='my-employee-profile-update'),
 
+    # Employee self-service
+    # Admin
+    path('vehicle-assignments/', AdminVehicleAssignmentListView.as_view(), name='vehicle-assignments'),
+    path('<uuid:user_id>/assign-vehicle/', AdminAssignVehicleView.as_view(), name='assign-vehicle'),
+
+    # Employee
+    path('my-vehicle/', EmployeeMyVehicleView.as_view(), name='my-vehicle'),
+    
     # Admin user management
     path('admin/users/', AdminUserListView.as_view(), name='admin-user-list'),
     path('admin/users/<uuid:id>/', AdminUserDetailView.as_view(), name='admin-user-detail'),

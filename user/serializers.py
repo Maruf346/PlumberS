@@ -1001,3 +1001,78 @@ class AdminUserDetailSerializer(ModelSerializer):
     def get_jobs(self, obj):
         jobs = obj.assigned_jobs.all()  # adjust related_name
         return JobSummarySerializer(jobs, many=True).data
+    
+    
+class AssignedVehicleSerializer(serializers.ModelSerializer):
+    """Vehicle detail shown inside employee profile responses."""
+    last_inspection_date = serializers.ReadOnlyField()
+    km_until_service = serializers.ReadOnlyField()
+
+    class Meta:
+        from fleets.models import Vehicle
+        model = Vehicle
+        fields = [
+            'id', 'name', 'plate', 'picture', 'status',
+            'make', 'model_name', 'year',
+            'current_odometer_km', 'next_service_km',
+            'km_until_service', 'last_inspection_date',
+        ]
+
+
+class EmployeeVehicleAssignSerializer(serializers.ModelSerializer):
+    """
+    Admin uses this to assign or unassign a vehicle.
+    Send vehicle_id=<uuid> to assign, vehicle_id=null to unassign.
+    """
+    assigned_vehicle_id = serializers.UUIDField(
+        allow_null=True,
+        required=True,
+        write_only=True,
+    )
+
+    class Meta:
+        model = EmployeeProfile
+        fields = ['assigned_vehicle_id']
+
+    def validate_assigned_vehicle_id(self, value):
+        if value is None:
+            return value
+        from fleets.models import Vehicle
+        try:
+            vehicle = Vehicle.objects.get(id=value, is_active=True)
+        except Vehicle.DoesNotExist:
+            raise serializers.ValidationError('Vehicle not found or inactive.')
+        # Warn if already assigned to another employee — but allow it
+        # (admin may want same vehicle shared in edge cases)
+        return value
+
+    def update(self, instance, validated_data):
+        vehicle_id = validated_data.get('assigned_vehicle_id')
+        if vehicle_id is None:
+            instance.assigned_vehicle = None
+        else:
+            from fleets.models import Vehicle
+            instance.assigned_vehicle = Vehicle.objects.get(id=vehicle_id)
+        instance.save(update_fields=['assigned_vehicle'])
+        return instance
+
+
+class EmployeeVehicleAssignmentListSerializer(serializers.ModelSerializer):
+    """
+    Admin list — shows each employee with their assigned vehicle.
+    """
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    full_name = serializers.CharField(source='user.full_name', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    phone = serializers.CharField(source='user.phone', read_only=True)
+    profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
+    assigned_vehicle = AssignedVehicleSerializer(read_only=True)
+
+    class Meta:
+        model = EmployeeProfile
+        fields = [
+            'id',
+            'user_id', 'full_name', 'email', 'phone', 'profile_picture',
+            'employee_id', 'primary_skill',
+            'assigned_vehicle',
+        ]

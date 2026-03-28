@@ -11,6 +11,8 @@ from django.views.decorators.cache import cache_page
 from django.db.models import Count
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import *
+from .models import *
+from .permissions import *
 from drf_spectacular.utils import OpenApiParameter, extend_schema, OpenApiResponse, extend_schema_view, inline_serializer
 from rest_framework.generics import GenericAPIView
 from google_auth_oauthlib.flow import Flow
@@ -917,3 +919,117 @@ class AdminUserListView(ListAPIView):
 
     def get_queryset(self):
         return User.objects.exclude(is_superuser=True).order_by('-created_at')
+    
+    
+class AdminVehicleAssignmentListView(ListAPIView):
+    """
+    GET /api/users/vehicle-assignments/
+    Admin sees all employees with their assigned vehicle (or null).
+    Only employees are shown — not managers or admins.
+    """
+    permission_classes = [IsAdminOrManager]
+    serializer_class = EmployeeVehicleAssignmentListSerializer
+
+    def get_queryset(self):
+        return EmployeeProfile.objects.select_related(
+            'user', 'assigned_vehicle'
+        ).filter(
+            user__is_staff=False,
+            user__is_superuser=False,
+            user__is_active=True,
+        ).order_by('user__full_name')
+
+    @extend_schema(
+        tags=['users-admin'],
+        summary="List all employee vehicle assignments",
+        description="Returns all employees with their currently assigned vehicle. null means unassigned."
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminAssignVehicleView(APIView):
+    """
+    GET  /api/users/<user_id>/assign-vehicle/  → admin sees assigned vehicle for a specific employee
+    PATCH /api/users/<user_id>/assign-vehicle/ → admin assigns or unassigns a vehicle
+    """
+    permission_classes = [IsAdmin]
+
+    def _get_profile(self, user_id):
+        from user.models import EmployeeProfile
+        return get_object_or_404(
+            EmployeeProfile.objects.select_related('user', 'assigned_vehicle'),
+            user__id=user_id,
+            user__is_staff=False,
+            user__is_superuser=False,
+        )
+
+    @extend_schema(
+        tags=['users-admin'],
+        summary="Get assigned vehicle for a specific employee",
+        responses={200: EmployeeVehicleAssignmentListSerializer},
+    )
+    def get(self, request, user_id):
+        profile = self._get_profile(user_id)
+        return Response(
+            EmployeeVehicleAssignmentListSerializer(profile).data,
+            status=status.HTTP_200_OK
+        )
+
+    @extend_schema(
+        tags=['users-admin'],
+        summary="Assign or unassign vehicle for employee",
+        request=EmployeeVehicleAssignSerializer,
+        responses={200: EmployeeVehicleAssignmentListSerializer},
+    )
+    def patch(self, request, user_id):
+        profile = self._get_profile(user_id)
+        serializer = EmployeeVehicleAssignSerializer(
+            profile, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        profile = serializer.save()
+
+        return Response(
+            {
+                'message': (
+                    f'Vehicle assigned to {profile.user.full_name}.'
+                    if profile.assigned_vehicle
+                    else f'Vehicle unassigned from {profile.user.full_name}.'
+                ),
+                'data': EmployeeVehicleAssignmentListSerializer(profile).data,
+            },
+            status=status.HTTP_200_OK
+        )
+        
+
+class EmployeeMyVehicleView(APIView):
+    """
+    GET /api/users/my-vehicle/
+    Employee sees their own assigned vehicle detail.
+    Returns null data if no vehicle is assigned.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['users-employee'],
+        summary="My assigned vehicle",
+        description="Returns the vehicle currently assigned to the requesting employee, or null."
+    )
+    def get(self, request):
+        from user.models import EmployeeProfile
+        try:
+            profile = EmployeeProfile.objects.select_related(
+                'assigned_vehicle'
+            ).get(user=request.user)
+        except EmployeeProfile.DoesNotExist:
+            return Response(
+                {'error': 'Employee profile not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        vehicle = profile.assigned_vehicle
+        return Response({
+            'has_vehicle': vehicle is not None,
+            'vehicle': AssignedVehicleSerializer(vehicle).data if vehicle else None,
+        }, status=status.HTTP_200_OK)
