@@ -140,8 +140,8 @@ def _draw_header_footer(canv, doc, report_title, total_pages):
     s = _s()
 
     # ── Logo ──────────────────────────────────────────────────────────────────
-    logo_h = 1.2 * cm
-    logo_w = 4.5 * cm   # will be overridden by actual ratio below
+    logo_h = 2.4 * cm
+    logo_w = 9.0 * cm   # will be overridden by actual ratio below
     if os.path.exists(LOGO_PATH):
         try:
             pil = PILImage.open(LOGO_PATH)
