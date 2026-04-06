@@ -230,3 +230,30 @@ celerybeat-schedule-wal
 db_volume/
 staticfiles/
 media/
+.env.production
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Django
+*.sqlite3
+celerybeat-schedule
+celerybeat.pid
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    networks:
+      - plumbers_net
+
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      SERVICE_TYPE: django
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - redis
+    networks:
+      - plumbers_net
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      SERVICE_TYPE: celery_worker
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      - redis
+      - django
+    networks:
+      - plumbers_net
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      SERVICE_TYPE: celery_beat
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      - redis
+      - django
+    networks:
+      - plumbers_net
+
+volumes:
+  media_data:
+  static_data:
+
+networks:
+  plumbers_net:
+    driver: bridge
