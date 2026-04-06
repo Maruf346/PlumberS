@@ -1,0 +1,67 @@
+# .github/workflows/deploy.yml
+
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: []   # No dependency on ci.yml — but deploy only triggers on main push
+                # ci.yml also triggers on main push and runs tests independently
+                # If you want deploy to wait for CI to pass first, see note below
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+
+            echo "=== PlumberS Deployment Started ==="
+
+            cd ~/plumbers-backend
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Stopping existing containers..."
+            docker compose -f docker-compose.prod.yml --env-file .env.production down
+
+            echo "Building new images..."
+            docker compose -f docker-compose.prod.yml --env-file .env.production build
+
+            echo "Starting containers..."
+            docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+            echo "Waiting for Django to be healthy..."
+            sleep 15
+
+            echo "Running migrations..."
+            docker compose -f docker-compose.prod.yml --env-file .env.production exec -T django python manage.py migrate --noinput
+
+            echo "Collecting static files..."
+            docker compose -f docker-compose.prod.yml --env-file .env.production exec -T django python manage.py collectstatic --noinput
+
+            echo "Cleaning up old Docker images..."
+            docker image prune -f
+
+            echo "=== Deployment complete ==="
+          EOF
+
+      - name: Deployment Status
+        run: |
+          echo "Deployed to http://${{ secrets.EC2_HOST }}"
+          echo "Swagger docs: http://${{ secrets.EC2_HOST }}/api/docs/"

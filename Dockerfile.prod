@@ -1,26 +1,33 @@
 FROM python:3.12-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
+WORKDIR /app
+
+# System dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    curl \
+    netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
-WORKDIR /app
-
-# Install Python dependencies
+# Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Copy project
 COPY . .
 
-# Copy and set entrypoint
+# Create dirs
+RUN mkdir -p /app/staticfiles /app/media /app/db_volume
+
+# Copy and permission the entrypoint
 COPY entrypoint.prod.sh /entrypoint.prod.sh
 RUN chmod +x /entrypoint.prod.sh
 

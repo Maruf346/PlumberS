@@ -1,46 +1,66 @@
-version: '3.8'
+version: '3.9'
 
 services:
 
   redis:
     image: redis:7-alpine
+    container_name: plumbers_redis_prod
     restart: always
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
     networks:
       - plumbers_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   django:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    container_name: plumbers_django_prod
     restart: always
     env_file:
       - .env.production
     environment:
-      SERVICE_TYPE: django
+      - SERVICE_TYPE=django
     volumes:
       - media_data:/app/media
       - static_data:/app/staticfiles
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - plumbers_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   celery_worker:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    container_name: plumbers_celery_worker_prod
     restart: always
     env_file:
       - .env.production
     environment:
-      SERVICE_TYPE: celery_worker
+      - SERVICE_TYPE=celery_worker
     volumes:
       - media_data:/app/media
     depends_on:
-      - redis
-      - django
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_healthy
     networks:
       - plumbers_net
 
@@ -48,20 +68,37 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    container_name: plumbers_celery_beat_prod
     restart: always
     env_file:
       - .env.production
     environment:
-      SERVICE_TYPE: celery_beat
-    volumes:
-      - media_data:/app/media
+      - SERVICE_TYPE=celery_beat
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_healthy
+    networks:
+      - plumbers_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: plumbers_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_data:/app/staticfiles:ro
+      - media_data:/app/media:ro
+    depends_on:
       - django
     networks:
       - plumbers_net
 
 volumes:
+  redis_data:
   media_data:
   static_data:
 

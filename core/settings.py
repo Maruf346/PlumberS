@@ -62,6 +62,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -94,28 +95,25 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 # SECURITY SETTINGS FOR PRODUCTION
 if not DEBUG:
-    SECURE_SSL_REDIRECT = False
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    USE_X_FORWARDED_HOST = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = "DENY"
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT          = False  # Nginx handles SSL termination
+    SECURE_PROXY_SSL_HEADER      = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST         = True
+    SESSION_COOKIE_SECURE        = True
+    CSRF_COOKIE_SECURE           = True
+    SECURE_BROWSER_XSS_FILTER    = True
+    SECURE_CONTENT_TYPE_NOSNIFF  = True
+    X_FRAME_OPTIONS              = "DENY"
+    # Only enable HSTS after SSL is confirmed working
+    # Uncomment these AFTER you have SSL set up — wrong HSTS can lock out your site
+    # SECURE_HSTS_SECONDS          = 31536000
+    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # SECURE_HSTS_PRELOAD          = True
 
 # CORS SETTINGS
-CORS_ALLOWED_ORIGINS = [
-    "https://plumbersdomain.com",
-    "https://www.plumbersdomain.com",
-    "https://api.plumbersdomain.com",
-    "https://www.api.plumbersdomain.com",
-]
-
-if DEBUG:
-    CORS_ALLOWED_ORIGINS.append("http://localhost:3000")
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:3000'
+).split(',')
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -159,20 +157,21 @@ else:
 
 
 # Redis Configuration
-# REDIS_HOST = os.getenv('REDIS_HOST') or 'localhost'
-# REDIS_PORT = os.getenv('REDIS_PORT') or '6379'
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django_redis.cache.RedisCache',
-#         'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1', # conn url, [/1 -> Redis db no. 1]
-#         'OPTIONS': {
-#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-#         },
-#         'KEY_PREFIX': 'autointel',   # Adds a prefix to every cache key.
-#         'TIMEOUT': 300,  # Default cache expiry time = 300s (5 mins).
-#     }
-# }
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1', # conn url, [/1 -> Redis db no. 1]
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'adelaideplumbing',   # Adds a prefix to every cache key.
+        'TIMEOUT': 300,  # Default cache expiry time = 300s (5 mins).
+    }
+}
 
 
 
@@ -248,6 +247,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# WhiteNoise — serves static files efficiently in production
+# Already have whitenoise in MIDDLEWARE, this adds compression + caching
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -501,7 +504,7 @@ CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 
 
 # Rate Limiting Configuration
-RATELIMIT_ENABLE = False  # False: Disable rate limiting for development
+RATELIMIT_ENABLE = os.getenv('RATELIMIT_ENABLE', 'False') == 'True'
 RATELIMIT_USE_CACHE = 'default'  # Use Redis cache
 RATELIMIT_VIEW_403 = True  # Return 403 instead of default behavior
 
@@ -512,19 +515,41 @@ RATELIMIT_FAIL_OPEN = False  # If True, allows requests when rate limit backend 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': 'ratelimit.log',
+            'formatter': 'verbose',
         },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
     'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'WARNING' if not DEBUG else 'INFO',
+            'propagate': False,
+        },
         'django.ratelimit': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'WARNING',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
 }
