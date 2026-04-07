@@ -9,7 +9,7 @@
 
 ## 📄 License
 
-This project is intended for educational, research, and commercial MVP use.
+This project is intended for commercial MVP use.
 License details can be added based on deployment requirements.
 
 ---
