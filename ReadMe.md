@@ -2,7 +2,7 @@
 
 **Author:** Maruf Hossain     
 **Designation:** Jr. FullStack Developer         
-**@:** SparkTech Agency          
+**@**SparkTech Agency          
 📧 **Email:** [maruf.bshs@gmail.com](mailto:maruf.bshs@gmail.com)     
 
 ---
