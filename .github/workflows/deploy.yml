@@ -26,8 +26,9 @@ jobs:
 
           # Debug (safe)
           ls -la ~/.ssh
+          echo "Host is: ${{ secrets.EC2_HOST }}"
 
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts || echo "ssh-keyscan failed"
 
       - name: Deploy to EC2
         run: |
