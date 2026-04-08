@@ -1,6 +1,6 @@
 ## 👤 Author & Contact
 
-**Author:** Maruf Hossain     
+**Developer:** Maruf Hossain     
 **Designation:** Jr. FullStack Developer         
 **@**SparkTech Agency          
 📧 **Email:** [maruf.bshs@gmail.com](mailto:maruf.bshs@gmail.com)     
