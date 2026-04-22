@@ -156,6 +156,7 @@ class JobListSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
+            'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'scheduled_datetime', "vehicle_name",
             'client', 'client_name', 'client_address',
             'assigned_to', 'is_overdue', 'has_fleet_issue',
@@ -191,8 +192,8 @@ class JobDetailSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
-            'job_details',
-            'scheduled_datetime',
+            'job_details','scheduled_datetime',
+            'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client', 'assigned_to', 'assigned_managers',
             'vehicle', 'safety_forms', 'reports',
             'attachments', 'line_items',
@@ -245,8 +246,8 @@ class JobWriteSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'job_name', 'job_details',
-            'priority',
-            'scheduled_datetime',
+            'priority','scheduled_datetime',
+            'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client_id', 'assigned_to_id', 'assigned_manager_ids',
             'vehicle_id', 'safety_form_ids', 'report_type_ids',
         ]
@@ -498,7 +499,9 @@ class JobMinimalSerializer(serializers.ModelSerializer):
             'id', 'job_id', 'job_name',
             'client_address', 'scheduled_datetime',
             'vehicle_name', 'vehicle_plate',
-            'status',
+            'status', 
+            'insured_name', 'insured_phone', 'insured_email', 
+            'insured_address', 'site_access_info',
         ]
 
 
@@ -523,8 +526,9 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
             'status', 'priority', 'scheduled_datetime',
             'vehicle_name', 'vehicle_plate',
             'client_info', 'assigned_employee_info',
-            'attachments',
-            'reports',
+            'attachments','reports',
+            'insured_name', 'insured_phone', 'insured_email', 
+            'insured_address', 'site_access_info',
             'safety_form_ids',
             'created_at', 'updated_at',
         ]

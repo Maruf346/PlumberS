@@ -83,6 +83,16 @@ class Job(models.Model):
     # Core details
     job_name = models.CharField(max_length=200, blank=True)
     job_details = models.TextField(blank=True)
+    
+    # Insured details — filled manually by admin at job creation
+    insured_name = models.CharField(max_length=150, blank=True)
+    insured_phone = models.CharField(max_length=30, blank=True)
+    insured_email = models.EmailField(blank=True)
+    insured_address = models.CharField(max_length=500, blank=True)
+    site_access_info = models.TextField(
+        blank=True,
+        help_text="Gate codes, access instructions, entry notes etc."
+    )
 
     # Scheduling
     scheduled_datetime = models.DateTimeField(
