@@ -12,24 +12,8 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from datetime import timedelta
 from django.http import FileResponse
 
-from .models import (
-    Job, JobAttachment, JobLineItem, JobActivity,
-    JobStatus, JobPriority, ActivityType,
-    # JobPhoto,   # commented out
-    # JobTask,    # commented out
-    JobNote, 
-)
-from .serializers import (
-    AdminJobStatusUpdateSerializer, EmployeeVehicleSerializer, JobListSerializer, JobDetailSerializer, JobWriteSerializer,
-    JobScheduleSerializer, JobStatusUpdateSerializer, JobDashboardSerializer,
-    JobAttachmentSerializer, JobLineItemSerializer, JobActivitySerializer,
-    JobMinimalSerializer, EmployeeJobDetailSerializer,
-    EmployeeJobListResponseSerializer, EmployeeCalendarJobsSerializer, RecentActivitySerializer,
-    # JobPhotoSerializer,      # commented out
-    # JobTaskSerializer,       # commented out
-    JobNoteSerializer, 
-    JobNoteCreateSerializer,
-)
+from .models import *
+from .serializers import *
 from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
 
 
@@ -64,8 +48,14 @@ class JobDashboardView(APIView):
             scheduled_datetime__gte=today_start,
             scheduled_datetime__lte=today_end
         ).count()
+        scheduled = jobs.filter(status=JobStatus.SCHEDULED).count()
         pending = jobs.filter(status=JobStatus.PENDING).count()
+        in_progress = jobs.filter(status=JobStatus.IN_PROGRESS).count()
+        on_hold = jobs.filter(status=JobStatus.ON_HOLD).count()
+        to_invoice = jobs.filter(status=JobStatus.TO_INVOICE).count()
         completed = jobs.filter(status=JobStatus.COMPLETED).count()
+        cancelled = jobs.filter(status=JobStatus.CANCELLED).count()
+        emergency_make_safe = jobs.filter(status=JobStatus.EMERGENCY_MAKE_SAFE).count()
         overdue = jobs.filter(status=JobStatus.OVERDUE).count()
 
         pending_safety = jobs.filter(
@@ -82,8 +72,14 @@ class JobDashboardView(APIView):
             'total_jobs': jobs.count(),
             'active_jobs': active,
             'jobs_today': jobs_today,
+            'scheduled_jobs': scheduled,
             'pending_jobs': pending,
+            'in_progress_jobs': in_progress,
+            'on_hold_jobs': on_hold,
+            'to_invoice_jobs': to_invoice,
             'completed_jobs': completed,
+            'cancelled_jobs': cancelled,
+            'emergency_make_safe_jobs': emergency_make_safe,
             'overdue_jobs': overdue,
             'pending_safety_forms': pending_safety,
             'fleet_issues': fleet_issues,
