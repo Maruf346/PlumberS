@@ -1,22 +1,6 @@
 from django.urls import path
-from .views import (
-    # Dashboard
-    FleetDashboardView,
-    FleetAlertsView,
-    # Vehicles — shared
-    VehicleListView,
-    VehicleDetailView,
-    # Vehicles — admin
-    AdminVehicleCreateView,
-    AdminVehicleUpdateView,
-    # Maintenance — shared
-    MaintenanceListView,
-    # Maintenance — admin
-    AdminMaintenanceCreateView,
-    AdminMaintenanceUpdateView,
-    # Report
-    FleetReportDownloadView,
-)
+from .views import *
+
 
 urlpatterns = [
     # Dashboard & alerts
@@ -36,4 +20,11 @@ urlpatterns = [
 
     # Report
     path('report/download/', FleetReportDownloadView.as_view(), name='fleet-report'),
+    
+    # Fuel
+    path('fuel/add/', EmployeeAddFuelView.as_view(), name='employee-add-fuel'),
+    path('<uuid:vehicle_id>/fuel-history/', AdminVehicleFuelHistoryView.as_view(), name='vehicle-fuel-history'),
+
+    # Assigned employee
+    path('<uuid:vehicle_id>/assigned-employee/', VehicleAssignedEmployeeView.as_view(), name='vehicle-assigned-employee'),
 ]

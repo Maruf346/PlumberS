@@ -10,16 +10,10 @@ from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import csv
 
-from .models import Vehicle, MaintenanceSchedule, VehicleStatus, MaintenanceStatus
-from .serializers import (
-    VehicleListSerializer,
-    VehicleDetailSerializer,
-    VehicleWriteSerializer,
-    MaintenanceScheduleSerializer,
-    MaintenanceScheduleWriteSerializer,
-    FleetDashboardSerializer,
-    FleetAlertSerializer,
-)
+from user.models import EmployeeProfile
+
+from .models import *
+from .serializers import *
 from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
 
 
@@ -358,3 +352,105 @@ class FleetReportDownloadView(APIView):
             ])
 
         return response
+    
+    
+class EmployeeAddFuelView(APIView):
+    """
+    POST /api/fleets/fuel/add/
+    Employee adds a fuel log for their assigned vehicle.
+    Only works if the employee has an assigned vehicle on their profile.
+    """
+    permission_classes = [IsAdminOrManagerOrEmployee]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(
+        tags=['fleets-fuel'],
+        summary="Add fuel log (employee)",
+        description=(
+            "Employee submits a fuel addition for their assigned vehicle. "
+            "Vehicle is automatically determined from the employee profile — "
+            "employee cannot choose a different vehicle."
+        ),
+        request=FuelLogCreateSerializer,
+        responses={201: FuelLogSerializer},
+    )
+    def post(self, request):
+        serializer = FuelLogCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        fuel_log = serializer.save()
+        return Response(
+            {
+                'message': 'Fuel log added successfully.',
+                'data': FuelLogSerializer(fuel_log, context={'request': request}).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AdminVehicleFuelHistoryView(ListAPIView):
+    """
+    GET /api/fleets/{vehicle_id}/fuel-history/
+    Admin/manager views full fuel log history for a specific vehicle.
+    Returns all entries ordered by date descending with full details per entry.
+    """
+    permission_classes = [IsAdminOrManager]
+    serializer_class = FuelLogSerializer
+
+    def get_queryset(self):
+        return FuelLog.objects.filter(
+            vehicle__id=self.kwargs['vehicle_id']
+        ).select_related('added_by', 'vehicle').order_by('-date', '-created_at')
+
+    @extend_schema(
+        tags=['fleets-fuel'],
+        summary="Vehicle fuel history (admin)",
+        description="Full fuel log history for a specific vehicle. All entries with complete details."
+    )
+    def get(self, request, *args, **kwargs):
+        # Verify vehicle exists
+        get_object_or_404(Vehicle, id=self.kwargs['vehicle_id'])
+        return super().get(request, *args, **kwargs)
+
+
+class VehicleAssignedEmployeeView(APIView):
+    """
+    GET /api/fleets/{vehicle_id}/assigned-employee/
+    Returns the employee currently assigned to a vehicle.
+    Returns null if no employee is assigned.
+    """
+    permission_classes = [IsAdminOrManager]
+
+    @extend_schema(
+        tags=['fleets'],
+        summary="Get assigned employee for a vehicle",
+        description=(
+            "Returns the employee currently assigned to the given vehicle. "
+            "Returns null if no employee is currently assigned."
+        ),
+        responses={200: VehicleAssignedEmployeeSerializer},
+    )
+    def get(self, request, vehicle_id):
+        vehicle = get_object_or_404(Vehicle, id=vehicle_id)
+
+        try:
+            profile = EmployeeProfile.objects.select_related('user').get(
+                assigned_vehicle=vehicle,
+                user__is_active=True
+            )
+        except EmployeeProfile.DoesNotExist:
+            return Response({
+                'vehicle_id': str(vehicle.id),
+                'vehicle_name': vehicle.name,
+                'assigned_employee': None,
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            'vehicle_id': str(vehicle.id),
+            'vehicle_name': vehicle.name,
+            'assigned_employee': VehicleAssignedEmployeeSerializer(
+                profile, context={'request': request}
+            ).data,
+        }, status=status.HTTP_200_OK)

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import Vehicle, MaintenanceSchedule, VehicleStatus, MaintenanceStatus
+from .models import *
 from user.models import User
 
 
@@ -30,6 +30,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
             'last_inspection_date',
             'current_odometer_km', 'next_service_km',
             'km_until_service', 'is_service_overdue',
+            'registration_due', 'service_due',
             'is_active', 'created_at'
         ]
 
@@ -51,6 +52,7 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
             'current_odometer_km', 'next_service_km',
             'km_until_service', 'is_service_overdue',
             'last_inspection_date', 'upcoming_maintenance',
+            'registration_due', 'service_due',
             'is_active', 'created_at', 'updated_at'
         ]
 
@@ -81,6 +83,7 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
             'name', 'plate', 'picture',
             'make', 'model_name', 'year',
             'current_odometer_km', 'next_service_km',
+            'registration_due', 'service_due',
             'notes', 'is_active' # 'assigned_to_id',
         ]
 
@@ -205,3 +208,78 @@ class FleetAlertSerializer(serializers.ModelSerializer):
             'last_inspection_date', # 'assigned_to', 
             'km_until_service', 'is_service_overdue'
         ]
+        
+        
+class FuelLogSerializer(serializers.ModelSerializer):
+    """Read serializer — used in admin fuel history list."""
+    added_by_name = serializers.CharField(source='added_by.full_name', read_only=True)
+    vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+
+    class Meta:
+        model = FuelLog
+        fields = [
+            'id', 'vehicle', 'vehicle_name', 'vehicle_plate',
+            'added_by', 'added_by_name',
+            'date', 'litres', 'cost', 'odometer_km',
+            'receipt_photo', 'notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'vehicle', 'added_by', 'vehicle_name',
+                            'vehicle_plate', 'added_by_name', 'created_at']
+
+
+class FuelLogCreateSerializer(serializers.ModelSerializer):
+    """Employee submits fuel addition for their assigned vehicle."""
+
+    class Meta:
+        model = FuelLog
+        fields = ['date', 'litres', 'cost', 'odometer_km', 'receipt_photo', 'notes']
+
+    def validate(self, data):
+        user = self.context['request'].user
+        # Check employee has an assigned vehicle
+        try:
+            profile = user.employee_profile
+        except Exception:
+            raise serializers.ValidationError(
+                'You do not have an employee profile.'
+            )
+        if not profile.assigned_vehicle:
+            raise serializers.ValidationError(
+                'You do not have an assigned vehicle. Contact your admin.'
+            )
+        return data
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        vehicle = user.employee_profile.assigned_vehicle
+        return FuelLog.objects.create(
+            vehicle=vehicle,
+            added_by=user,
+            **validated_data
+        )
+
+
+class VehicleAssignedEmployeeSerializer(serializers.Serializer):
+    """
+    Returns the employee currently assigned to a vehicle.
+    Used by admin fleet page to show assigned employee per vehicle.
+    """
+    employee_id = serializers.UUIDField(source='user.id')
+    full_name = serializers.CharField(source='user.full_name')
+    email = serializers.CharField(source='user.email')
+    phone = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
+    employee_profile_id = serializers.UUIDField(source='id')
+    primary_skill = serializers.CharField()
+    employee_id_number = serializers.CharField(source='employee_id')
+
+    def get_phone(self, obj):
+        return str(obj.user.phone) if obj.user.phone else None
+
+    def get_profile_picture(self, obj):
+        request = self.context.get('request')
+        pic = obj.user.profile_picture
+        if pic and request:
+            return request.build_absolute_uri(pic.url)
+        return None

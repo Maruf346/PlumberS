@@ -305,15 +305,27 @@ class JobScheduleView(APIView):
             # If already OVERDUE, nothing changes — just log the reschedule
 
         elif job.scheduled_datetime and job.scheduled_datetime > now:
-            # New date is in the future — restore from OVERDUE
+            # New date is in the future
             if job.status == JobStatus.OVERDUE:
+                # Restore from overdue — use pre_overdue_status if available
                 restore_to = job.pre_overdue_status or JobStatus.PENDING
+                # If restoring to PENDING, upgrade to SCHEDULED since it now has a future date
+                if restore_to == JobStatus.PENDING:
+                    restore_to = JobStatus.SCHEDULED
                 job.status = restore_to
                 job.pre_overdue_status = None
                 job.save(update_fields=['status', 'pre_overdue_status'])
                 _log_activity(
                     job, ActivityType.STATUS_CHANGED, request.user,
                     f"Status restored to {restore_to} after reschedule to future date"
+                )
+            elif job.status == JobStatus.PENDING:
+                # Job was PENDING and got a future scheduled date — promote to SCHEDULED
+                job.status = JobStatus.SCHEDULED
+                job.save(update_fields=['status'])
+                _log_activity(
+                    job, ActivityType.STATUS_CHANGED, request.user,
+                    "Status set to Scheduled after scheduling to a future date"
                 )
 
         # Notify assigned employee

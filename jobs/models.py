@@ -5,9 +5,14 @@ import uuid
 
 
 class JobStatus(models.TextChoices):
-    PENDING = 'pending', 'Pending'
+    SCHEDULED = 'scheduled', 'Scheduled'
+    PENDING = 'pending', 'To be booked'
     IN_PROGRESS = 'in_progress', 'In Progress'
+    ON_HOLD = 'on_hold', 'On Hold'
+    TO_INVOICE = 'to_invoice', 'To Invoice'
     COMPLETED = 'completed', 'Completed'
+    CANCELLED = 'cancelled', 'Cancelled'
+    EMERGENCY_MAKE_SAFE = 'emergency_make_safe', 'Emergency Make Safe'
     OVERDUE = 'overdue', 'Overdue'
 
 

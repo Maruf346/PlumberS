@@ -62,6 +62,18 @@ class Vehicle(models.Model):
         blank=True,
         help_text="Odometer reading (km) at which next service is due"
     )
+    
+    # Date-based due tracking
+    registration_due = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when vehicle registration is due for renewal"
+    )
+    service_due = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when next service is due"
+    )
 
     # Assignment — one employee at a time, optional
     # assigned_to = models.ForeignKey(
@@ -194,3 +206,70 @@ class MaintenanceSchedule(models.Model):
         verbose_name = 'Maintenance Schedule'
         verbose_name_plural = 'Maintenance Schedules'
         ordering = ['-scheduled_date']
+        
+        
+def fuel_receipt_path(instance, filename):
+    return f'fleet/fuel_receipts/{instance.vehicle.id}/{filename}'
+
+
+class FuelLog(models.Model):
+    """
+    Fuel addition record submitted by an employee for their assigned vehicle.
+    Admin can view full history per vehicle.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    vehicle = models.ForeignKey(
+        Vehicle,
+        on_delete=models.CASCADE,
+        related_name='fuel_logs'
+    )
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='fuel_logs'
+    )
+
+    date = models.DateField(
+        help_text="Date fuel was added",
+        blank=True,
+        null=True
+    )
+    litres = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Litres of fuel added"
+    )
+    cost = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Total cost of fuel"
+    )
+    odometer_km = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Odometer reading at time of fill-up"
+    )
+    receipt_photo = models.ImageField(
+        upload_to=fuel_receipt_path,
+        null=True,
+        blank=True,
+        help_text="Photo of the fuel receipt"
+    )
+    notes = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Fuel Log'
+        verbose_name_plural = 'Fuel Logs'
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.vehicle.name} — {self.date} — {self.litres}L by {self.added_by}"
+    
