@@ -379,7 +379,11 @@ class JobWriteSerializer(serializers.ModelSerializer):
         return self._set_relations(job, validated_data, is_create=True)
 
     def update(self, instance, validated_data):
-        scalar_fields = ['job_name', 'job_details', 'priority', 'scheduled_datetime']
+        scalar_fields = [
+            'job_name', 'job_details', 'priority', 'scheduled_datetime',
+            'insured_name', 'insured_phone', 'insured_email',
+            'insured_address', 'site_access_info'
+        ]
         for attr in scalar_fields:
             if attr in validated_data:
                 setattr(instance, attr, validated_data.pop(attr))
