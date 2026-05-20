@@ -105,6 +105,11 @@ class Job(models.Model):
         blank=True,
         help_text="Date and time the job is scheduled for"
     )
+    end_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Expected or actual end time of the job"
+    )
 
     # Relations
     client = models.ForeignKey(

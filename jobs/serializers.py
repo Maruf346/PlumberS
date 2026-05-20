@@ -157,7 +157,7 @@ class JobListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
             'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
-            'scheduled_datetime', "vehicle_name",
+            'scheduled_datetime', 'end_time', "vehicle_name",
             'client', 'client_name', 'client_address',
             'assigned_to', 'is_overdue', 'has_fleet_issue',
             'safety_form_count',
@@ -192,7 +192,7 @@ class JobDetailSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'status', 'priority', 'job_name',
-            'job_details','scheduled_datetime',
+            'job_details', 'scheduled_datetime', 'end_time',
             'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client', 'assigned_to', 'assigned_managers',
             'vehicle', 'safety_forms', 'reports',
@@ -246,7 +246,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'job_name', 'job_details',
-            'priority','scheduled_datetime',
+            'priority', 'scheduled_datetime', 'end_time',
             'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client_id', 'assigned_to_id', 'assigned_manager_ids',
             'vehicle_id', 'safety_form_ids', 'report_type_ids',
@@ -380,7 +380,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         scalar_fields = [
-            'job_name', 'job_details', 'priority', 'scheduled_datetime',
+            'job_name', 'job_details', 'priority', 'scheduled_datetime', 'end_time',
             'insured_name', 'insured_phone', 'insured_email',
             'insured_address', 'site_access_info'
         ]
@@ -391,14 +391,18 @@ class JobWriteSerializer(serializers.ModelSerializer):
 
 
 class JobScheduleSerializer(serializers.ModelSerializer):
-    """Dedicated for drag-and-drop calendar reschedule. Only updates scheduled_datetime."""
+    """Dedicated for drag-and-drop calendar reschedule. Updates scheduled_datetime and optionally end_time."""
+    end_time = serializers.DateTimeField(required=False, allow_null=True)
+
     class Meta:
         model = Job
-        fields = ['scheduled_datetime']
+        fields = ['scheduled_datetime', 'end_time']
 
     def update(self, instance, validated_data):
         old_dt = instance.scheduled_datetime
         instance.scheduled_datetime = validated_data['scheduled_datetime']
+        if 'end_time' in validated_data:
+            instance.end_time = validated_data['end_time']
         instance.save()
         JobActivity.objects.create(
             job=instance,
@@ -507,7 +511,7 @@ class JobMinimalSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'job_name',
-            'client_address', 'scheduled_datetime',
+            'client_address', 'scheduled_datetime', 'end_time',
             'vehicle_name', 'vehicle_plate',
             'status', 
             'insured_name', 'insured_phone', 'insured_email', 
@@ -533,7 +537,7 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
         model = Job
         fields = [
             'id', 'job_id', 'job_name', 'job_details',
-            'status', 'priority', 'scheduled_datetime',
+            'status', 'priority', 'scheduled_datetime', 'end_time',
             'vehicle_name', 'vehicle_plate',
             'client_info', 'assigned_employee_info',
             'attachments','reports',

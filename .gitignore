@@ -257,3 +257,7 @@ celerybeat.pid
 .idea/
 *.swp
 *.swo
+
+
+/.refact
+/.claude
