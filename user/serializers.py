@@ -1076,3 +1076,31 @@ class EmployeeVehicleAssignmentListSerializer(serializers.ModelSerializer):
             'employee_id', 'primary_skill',
             'assigned_vehicle',
         ]
+
+
+# ==================== USER COLOR SERIALIZERS ====================
+
+class UserColorSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+
+    class Meta:
+        model = UserColor
+        fields = ['id', 'user_id', 'user_name', 'color', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user_id', 'user_name', 'created_at', 'updated_at']
+
+    def validate_color(self, value):
+        import re
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise serializers.ValidationError('Enter a valid hex color code, e.g. #f54900')
+        return value.lower()
+
+
+class UserColorWriteSerializer(serializers.Serializer):
+    color = serializers.CharField(max_length=7)
+
+    def validate_color(self, value):
+        import re
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise serializers.ValidationError('Enter a valid hex color code, e.g. #f54900')
+        return value.lower()

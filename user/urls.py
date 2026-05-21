@@ -66,4 +66,7 @@ urlpatterns = [
     path('admin/users/<uuid:id>/', AdminUserDetailView.as_view(), name='admin-user-detail'),
     path('admin/users/<uuid:id>/block/', AdminBlockUserView.as_view(), name='admin-block-user'),
     path('admin/managers/create/', AdminCreateManagerView.as_view(), name='admin-create-manager'),
+
+    # User color
+    path('admin/users/<uuid:user_id>/color/', AdminUserColorView.as_view(), name='admin-user-color'),
 ]

@@ -1033,3 +1033,69 @@ class EmployeeMyVehicleView(APIView):
             'has_vehicle': vehicle is not None,
             'vehicle': AssignedVehicleSerializer(vehicle).data if vehicle else None,
         }, status=status.HTTP_200_OK)
+
+
+# ==================== USER COLOR VIEWS ====================
+
+class AdminUserColorView(APIView):
+    """
+    GET   /api/users/admin/users/<user_id>/color/  — get color for a user
+    POST  /api/users/admin/users/<user_id>/color/  — assign color to a user
+    PATCH /api/users/admin/users/<user_id>/color/  — update color for a user
+    """
+    permission_classes = [IsAdminUser]
+
+    def _get_user(self, user_id):
+        return get_object_or_404(User, id=user_id)
+
+    @extend_schema(
+        tags=['admin'],
+        summary="Get user color",
+        description="Returns the color assigned to the given user, or 404 if none set.",
+        responses={200: UserColorSerializer},
+    )
+    def get(self, request, user_id):
+        user = self._get_user(user_id)
+        try:
+            user_color = user.user_color
+        except User.user_color.RelatedObjectDoesNotExist:
+            return Response({'color': None}, status=status.HTTP_200_OK)
+        return Response(UserColorSerializer(user_color).data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=['admin'],
+        summary="Assign color to user",
+        description="Creates a color for the given user. Returns 400 if a color already exists (use PATCH to update).",
+        request=UserColorWriteSerializer,
+        responses={201: UserColorSerializer},
+    )
+    def post(self, request, user_id):
+        user = self._get_user(user_id)
+        if hasattr(user, 'user_color'):
+            return Response(
+                {'error': 'Color already exists for this user. Use PATCH to update.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        serializer = UserColorWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        from user.models import UserColor
+        user_color = UserColor.objects.create(user=user, color=serializer.validated_data['color'])
+        return Response(UserColorSerializer(user_color).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        tags=['admin'],
+        summary="Update user color",
+        description="Updates the color for the given user. Creates it if it doesn't exist yet.",
+        request=UserColorWriteSerializer,
+        responses={200: UserColorSerializer},
+    )
+    def patch(self, request, user_id):
+        user = self._get_user(user_id)
+        serializer = UserColorWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        from user.models import UserColor
+        user_color, _ = UserColor.objects.update_or_create(
+            user=user,
+            defaults={'color': serializer.validated_data['color']}
+        )
+        return Response(UserColorSerializer(user_color).data, status=status.HTTP_200_OK)

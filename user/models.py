@@ -3,9 +3,15 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from hashlib import sha256
 import uuid
+import re
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+
+
+def validate_hex_color(value):
+    if not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+        raise ValidationError('Enter a valid hex color code, e.g. #f54900')
 
 
 class AuthProvider(models.TextChoices):
@@ -205,6 +211,30 @@ class ManagerProfile(models.Model):
 
     def __str__(self):
         return f"Manager: {self.user.email}"
+
+
+class UserColor(models.Model):
+    """Color code assigned to a user by admin. Used to color-code job cards on the dashboard."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='user_color'
+    )
+    color = models.CharField(
+        max_length=7,
+        validators=[validate_hex_color],
+        help_text="Hex color code, e.g. #f54900"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.full_name or self.user.email} — {self.color}"
+
+    class Meta:
+        verbose_name = 'User Color'
+        verbose_name_plural = 'User Colors'
 
 
 # class UserSettings(models.Model):

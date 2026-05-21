@@ -115,9 +115,17 @@ class JobNoteCreateSerializer(serializers.Serializer):
 # ==================== ASSIGNED USER SERIALIZERS ====================
 
 class AssignedEmployeeSerializer(serializers.ModelSerializer):
+    color = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'email', 'phone', 'profile_picture']
+        fields = ['id', 'full_name', 'email', 'phone', 'profile_picture', 'color']
+
+    def get_color(self, obj):
+        try:
+            return obj.user_color.color
+        except Exception:
+            return None
 
 
 class AssignedManagerSerializer(serializers.ModelSerializer):
