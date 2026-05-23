@@ -54,7 +54,7 @@ class Job(models.Model):
     - PENDING:     No assigned_to, or created but not started.
     - IN_PROGRESS: Assigned employee has started the job.
     - COMPLETED:   Assigned employee marked it complete.
-    - OVERDUE:     scheduled_datetime has passed and job is not completed.
+    - OVERDUE:     Earliest Note.scheduled_datetime has passed and job is not completed.
                    Checked via Celery beat task or on retrieval.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -97,18 +97,6 @@ class Job(models.Model):
     site_access_info = models.TextField(
         blank=True,
         help_text="Gate codes, access instructions, entry notes etc."
-    )
-
-    # Scheduling
-    scheduled_datetime = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Date and time the job is scheduled for"
-    )
-    end_time = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Expected or actual end time of the job"
     )
 
     # Relations
@@ -191,9 +179,12 @@ class Job(models.Model):
         return "JB-1001"
 
     def check_overdue(self):
+        earliest = self.notes.filter(
+            scheduled_datetime__isnull=False
+        ).order_by('scheduled_datetime').values_list('scheduled_datetime', flat=True).first()
         if (
-            self.scheduled_datetime and
-            timezone.now() > self.scheduled_datetime and
+            earliest and
+            timezone.now() > earliest and
             self.status not in [JobStatus.COMPLETED]
         ):
             self.status = JobStatus.OVERDUE
@@ -201,12 +192,7 @@ class Job(models.Model):
 
     @property
     def is_overdue(self):
-        if not self.scheduled_datetime:
-            return False
-        return (
-            timezone.now() > self.scheduled_datetime and
-            self.status != JobStatus.COMPLETED
-        )
+        return self.status == JobStatus.OVERDUE
 
     @property
     def has_fleet_issue(self):
@@ -329,7 +315,7 @@ class JobNote(models.Model):
     job = models.ForeignKey(
         Job,
         on_delete=models.CASCADE,
-        related_name='notes'
+        related_name='job_notes_chat'
     )
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL,

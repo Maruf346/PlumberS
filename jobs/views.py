@@ -1,14 +1,13 @@
+from types import SimpleNamespace
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-# import datetime
 from datetime import timedelta
 from django.http import FileResponse
 
@@ -26,6 +25,68 @@ def _log_activity(job, activity_type, actor, description=''):
     )
 
 
+def _build_note_job_entry(note, job):
+    return SimpleNamespace(
+        id=job.id,
+        note_id=note.id,
+        job_id=job.job_id,
+        status=job.status,
+        priority=job.priority,
+        job_name=job.job_name,
+        insured_name=job.insured_name or '',
+        insured_phone=str(job.insured_phone) if job.insured_phone else '',
+        insured_email=job.insured_email or '',
+        insured_address=job.insured_address or '',
+        site_access_info=job.site_access_info or '',
+        scheduled_datetime=note.scheduled_datetime,
+        end_time=note.end_time,
+        vehicle_name=job.vehicle.name if job.vehicle else None,
+        vehicle_plate=job.vehicle.plate if job.vehicle else None,
+        client=job.client.id if job.client else None,
+        client_name=job.client.name if job.client else None,
+        client_address=job.client.address if job.client else None,
+        assigned_to=job.assigned_to,
+        is_overdue=job.is_overdue,
+        has_fleet_issue=job.has_fleet_issue,
+        safety_form_count=len(job.safety_forms.all()),
+        created_at=job.created_at,
+    )
+
+
+def _build_job_entry_no_note(job):
+    return SimpleNamespace(
+        id=job.id,
+        note_id=None,
+        job_id=job.job_id,
+        status=job.status,
+        priority=job.priority,
+        job_name=job.job_name,
+        insured_name=job.insured_name or '',
+        insured_phone=str(job.insured_phone) if job.insured_phone else '',
+        insured_email=job.insured_email or '',
+        insured_address=job.insured_address or '',
+        site_access_info=job.site_access_info or '',
+        scheduled_datetime=None,
+        end_time=None,
+        vehicle_name=job.vehicle.name if job.vehicle else None,
+        vehicle_plate=job.vehicle.plate if job.vehicle else None,
+        client=job.client.id if job.client else None,
+        client_name=job.client.name if job.client else None,
+        client_address=job.client.address if job.client else None,
+        assigned_to=job.assigned_to,
+        is_overdue=job.is_overdue,
+        has_fleet_issue=job.has_fleet_issue,
+        safety_form_count=len(job.safety_forms.all()),
+        created_at=job.created_at,
+    )
+
+
+def _job_base_qs():
+    return Job.objects.select_related(
+        'client', 'assigned_to', 'vehicle', 'assigned_to__user_color'
+    ).prefetch_related('safety_forms', 'notes')
+
+
 # ==================== DASHBOARD ====================
 
 class JobDashboardView(APIView):
@@ -34,20 +95,20 @@ class JobDashboardView(APIView):
 
     @extend_schema(tags=['jobs'], summary="Job dashboard summary")
     def get(self, request):
-        now = timezone.now()
-        today = now.date()
+        from notes.models import Note as NoteModel
 
-        # Build range using timedelta — no make_aware needed
+        now = timezone.now()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         jobs = Job.objects.all()
 
         active = jobs.filter(status=JobStatus.IN_PROGRESS).count()
-        jobs_today = jobs.filter(
+        jobs_today = NoteModel.objects.filter(
+            job__isnull=False,
             scheduled_datetime__gte=today_start,
-            scheduled_datetime__lte=today_end
-        ).count()
+            scheduled_datetime__lte=today_end,
+        ).values('job').distinct().count()
         scheduled = jobs.filter(status=JobStatus.SCHEDULED).count()
         pending = jobs.filter(status=JobStatus.PENDING).count()
         in_progress = jobs.filter(status=JobStatus.IN_PROGRESS).count()
@@ -89,62 +150,134 @@ class JobDashboardView(APIView):
 
 # ==================== JOB CRUD (ADMIN) ====================
 
-class AdminJobListView(ListAPIView):
-    """Admin/manager sees all jobs with filtering."""
+class AdminJobListView(APIView):
+    """Admin/manager sees all jobs — one entry per Note (or one entry if job has no notes)."""
     permission_classes = [IsAdminOrManager]
-    serializer_class = JobListSerializer
-
-    def get_queryset(self):
-        qs = Job.objects.select_related(
-            'client', 'assigned_to', 'vehicle'
-        ).prefetch_related('safety_forms')
-
-        status_filter = self.request.query_params.get('status')
-        if status_filter:
-            qs = qs.filter(status=status_filter)
-
-        priority = self.request.query_params.get('priority')
-        if priority:
-            qs = qs.filter(priority=priority)
-
-        assigned = self.request.query_params.get('assigned_to')
-        if assigned:
-            qs = qs.filter(assigned_to__id=assigned)
-
-        date_filter = self.request.query_params.get('date')
-        if date_filter:
-            qs = qs.filter(scheduled_datetime__date=date_filter)
-
-        search = self.request.query_params.get('search')
-        if search:
-            qs = qs.filter(
-                Q(job_id__icontains=search) |
-                Q(job_name__icontains=search) |
-                Q(client__name__icontains=search)
-            )
-        return qs.order_by('-created_at')
 
     @extend_schema(
         tags=['jobs'],
-        summary="List all jobs (admin/manager)",
+        summary="List all jobs (admin/manager) — one row per schedule slot",
         parameters=[
             OpenApiParameter('status', str, description='Filter by job status'),
             OpenApiParameter('priority', str, description='Filter by priority'),
             OpenApiParameter('assigned_to', str, description='Filter by employee UUID'),
-            OpenApiParameter('date', str, description='Filter by scheduled date YYYY-MM-DD'),
+            OpenApiParameter('date', str, description='Filter by note scheduled date YYYY-MM-DD'),
             OpenApiParameter('search', str, description='Search by job ID, name, or client'),
         ]
     )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    def get(self, request):
+        from datetime import date as date_type
+
+        jobs_qs = _job_base_qs()
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            jobs_qs = jobs_qs.filter(status=status_filter)
+
+        priority = request.query_params.get('priority')
+        if priority:
+            jobs_qs = jobs_qs.filter(priority=priority)
+
+        assigned = request.query_params.get('assigned_to')
+        if assigned:
+            jobs_qs = jobs_qs.filter(assigned_to__id=assigned)
+
+        search = request.query_params.get('search')
+        if search:
+            jobs_qs = jobs_qs.filter(
+                Q(job_id__icontains=search) |
+                Q(job_name__icontains=search) |
+                Q(client__name__icontains=search)
+            )
+
+        date_param = request.query_params.get('date')
+        parsed_date = None
+        if date_param:
+            try:
+                parsed_date = date_type.fromisoformat(date_param)
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        entries = []
+        for job in jobs_qs.order_by('-created_at'):
+            notes = list(job.notes.all())
+            if parsed_date:
+                notes = [n for n in notes if n.scheduled_datetime and n.scheduled_datetime.date() == parsed_date]
+            notes_sorted = sorted(
+                [n for n in notes if n.scheduled_datetime is not None],
+                key=lambda n: n.scheduled_datetime
+            ) + [n for n in notes if n.scheduled_datetime is None]
+            if notes_sorted:
+                for note in notes_sorted:
+                    entries.append(_build_note_job_entry(note, job))
+            elif not parsed_date:
+                entries.append(_build_job_entry_no_note(job))
+
+        return Response(JobListSerializer(entries, many=True).data)
+
+
+class AdminJobListUniqueView(APIView):
+    """Admin/manager sees all jobs — one entry per Job (for dropdowns / deduplicated lists)."""
+    permission_classes = [IsAdminOrManager]
+
+    @extend_schema(
+        tags=['jobs'],
+        summary="List all jobs — one row per job (deduplicated)",
+        parameters=[
+            OpenApiParameter('status', str, description='Filter by job status'),
+            OpenApiParameter('priority', str, description='Filter by priority'),
+            OpenApiParameter('assigned_to', str, description='Filter by employee UUID'),
+            OpenApiParameter('search', str, description='Search by job ID, name, or client'),
+        ]
+    )
+    def get(self, request):
+        jobs_qs = _job_base_qs()
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            jobs_qs = jobs_qs.filter(status=status_filter)
+
+        priority = request.query_params.get('priority')
+        if priority:
+            jobs_qs = jobs_qs.filter(priority=priority)
+
+        assigned = request.query_params.get('assigned_to')
+        if assigned:
+            jobs_qs = jobs_qs.filter(assigned_to__id=assigned)
+
+        search = request.query_params.get('search')
+        if search:
+            jobs_qs = jobs_qs.filter(
+                Q(job_id__icontains=search) |
+                Q(job_name__icontains=search) |
+                Q(client__name__icontains=search)
+            )
+
+        entries = []
+        for job in jobs_qs.order_by('-created_at'):
+            notes = sorted(
+                [n for n in job.notes.all() if n.scheduled_datetime],
+                key=lambda n: n.scheduled_datetime
+            )
+            if notes:
+                entries.append(_build_note_job_entry(notes[0], job))
+            else:
+                entries.append(_build_job_entry_no_note(job))
+
+        return Response(JobListSerializer(entries, many=True).data)
 
 
 class AdminJobDetailView(RetrieveAPIView):
     """Admin/manager retrieves full job detail."""
     permission_classes = [IsAdminOrManager]
     serializer_class = JobDetailSerializer
-    queryset = Job.objects.all()
     lookup_field = 'id'
+
+    def get_queryset(self):
+        return Job.objects.prefetch_related('notes__staff', 'notes__tasks')
 
     @extend_schema(tags=['jobs'], summary="Retrieve job detail (admin/manager)")
     def get(self, request, *args, **kwargs):
@@ -173,7 +306,6 @@ class AdminJobCreateView(APIView):
                 job, ActivityType.JOB_ASSIGNED, request.user,
                 f"Assigned to {job.assigned_to.full_name}"
             )
-            # Notify assigned employee
             try:
                 from notifications.services import NotificationTemplates
                 NotificationTemplates.job_assigned(job.assigned_to, job)
@@ -205,15 +337,14 @@ class AdminJobUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
         _log_activity(job, ActivityType.STATUS_CHANGED, request.user, "Job updated by admin")
-        
-        # Notify assigned employee that their job was updated
+
         try:
             from notifications.services import NotificationTemplates
             if job.assigned_to:
                 NotificationTemplates.job_updated(job.assigned_to, job)
         except Exception:
             pass
-    
+
         return Response(
             {'message': 'Job updated.', 'data': JobDetailSerializer(job).data},
             status=status.HTTP_200_OK
@@ -230,17 +361,12 @@ class AdminJobStatusUpdateView(APIView):
     """
     PATCH /api/jobs/{id}/admin-status/
     Admin forces a job to any status directly.
-    No transition rules — full control.
     """
     permission_classes = [IsAdminOrManager]
 
     @extend_schema(
         tags=['jobs'],
         summary="Admin — force update job status",
-        description=(
-            "Allows admin or manager to set a job to any status directly. "
-            "No transition restrictions. Logs the change to the activity timeline."
-        ),
         request=AdminJobStatusUpdateSerializer,
         responses={200: JobDetailSerializer},
     )
@@ -254,7 +380,6 @@ class AdminJobStatusUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         job = serializer.save()
 
-        # Notify assigned employee if they exist
         try:
             from notifications.services import NotificationTemplates
             if job.assigned_to:
@@ -266,117 +391,93 @@ class AdminJobStatusUpdateView(APIView):
             {'message': f'Job status updated to {job.status}.', 'data': JobDetailSerializer(job).data},
             status=status.HTTP_200_OK
         )
-        
+
 
 class JobScheduleView(APIView):
-    """Dedicated for drag-and-drop calendar rescheduling."""
+    """Deprecated — scheduling is now done through Notes (PATCH /api/notes/{id}/)."""
     permission_classes = [IsAdmin]
 
     @extend_schema(
         tags=['jobs'],
-        summary="Reschedule job (calendar drag-drop)",
-        request=JobScheduleSerializer,
-        responses={200: JobDetailSerializer}
+        summary="[Deprecated] Reschedule job — use PATCH /api/notes/{id}/ instead",
+        deprecated=True,
+        responses={410: None}
     )
     def patch(self, request, id):
-        job = get_object_or_404(Job, id=id)
-        serializer = JobScheduleSerializer(
-            job, data=request.data, context={'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        job = serializer.save()
-
-        now = timezone.now()
-
-        if job.scheduled_datetime and job.scheduled_datetime <= now:
-            # New date is still in the past — mark/keep as OVERDUE immediately
-            if job.status != JobStatus.OVERDUE:
-                job.pre_overdue_status = job.status
-                job.status = JobStatus.OVERDUE
-                job.save(update_fields=['status', 'pre_overdue_status'])
-                _log_activity(
-                    job, ActivityType.STATUS_CHANGED, request.user,
-                    "Rescheduled to a past date — marked overdue immediately"
-                )
-            # If already OVERDUE, nothing changes — just log the reschedule
-
-        elif job.scheduled_datetime and job.scheduled_datetime > now:
-            # New date is in the future
-            if job.status == JobStatus.OVERDUE:
-                # Restore from overdue — use pre_overdue_status if available
-                restore_to = job.pre_overdue_status or JobStatus.PENDING
-                # If restoring to PENDING, upgrade to SCHEDULED since it now has a future date
-                if restore_to == JobStatus.PENDING:
-                    restore_to = JobStatus.SCHEDULED
-                job.status = restore_to
-                job.pre_overdue_status = None
-                job.save(update_fields=['status', 'pre_overdue_status'])
-                _log_activity(
-                    job, ActivityType.STATUS_CHANGED, request.user,
-                    f"Status restored to {restore_to} after reschedule to future date"
-                )
-            elif job.status == JobStatus.PENDING:
-                # Job was PENDING and got a future scheduled date — promote to SCHEDULED
-                job.status = JobStatus.SCHEDULED
-                job.save(update_fields=['status'])
-                _log_activity(
-                    job, ActivityType.STATUS_CHANGED, request.user,
-                    "Status set to Scheduled after scheduling to a future date"
-                )
-
-        # Notify assigned employee
-        try:
-            from notifications.services import NotificationTemplates
-            if job.assigned_to:
-                NotificationTemplates.job_rescheduled(job.assigned_to, job)
-        except Exception:
-            pass
-
         return Response(
-            {'message': 'Job rescheduled.', 'data': JobDetailSerializer(job).data},
-            status=status.HTTP_200_OK
+            {'detail': 'This endpoint is deprecated. Schedule jobs via PATCH /api/notes/{id}/.'},
+            status=status.HTTP_410_GONE
         )
 
 
 # ==================== EMPLOYEE JOB VIEWS ====================
 
-class EmployeeJobListView(ListAPIView):
-    """Employee sees only their assigned jobs."""
+class EmployeeJobListView(APIView):
+    """Employee sees jobs — one entry per Note slot where they are staff, plus jobs assigned to them."""
     permission_classes = [IsAdminOrManagerOrEmployee]
-    serializer_class = JobListSerializer
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_superuser or user.is_staff:
-            qs = Job.objects.all()
-        else:
-            qs = Job.objects.filter(assigned_to=user)
-
-        filter_type = self.request.query_params.get('filter')
-        today = timezone.now().date()
-
-        if filter_type == 'today':
-            qs = qs.filter(scheduled_datetime__date=today)
-        elif filter_type == 'upcoming':
-            qs = qs.filter(
-                scheduled_datetime__date__gt=today
-            ).exclude(status=JobStatus.COMPLETED)
-        elif filter_type == 'completed':
-            qs = qs.filter(status=JobStatus.COMPLETED)
-        elif filter_type == 'active':
-            qs = qs.filter(status=JobStatus.IN_PROGRESS)
-
-        return qs.order_by('scheduled_datetime')
 
     @extend_schema(
         tags=['jobs'],
-        summary="Employee — list my jobs",
+        summary="Employee — list my jobs (Note-based)",
         parameters=[
-            OpenApiParameter('filter', str, description='today | upcoming | completed | active')
+            OpenApiParameter('filter', str, description='today | upcoming | completed | active'),
         ]
     )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    def get(self, request):
+        from notes.models import Note as NoteModel
+        from datetime import date as date_type
+
+        user = request.user
+        today = timezone.now().date()
+        filter_type = request.query_params.get('filter')
+
+        if user.is_superuser or user.is_staff:
+            jobs_qs = _job_base_qs()
+            notes_qs = NoteModel.objects.select_related(
+                'job', 'job__client', 'job__assigned_to',
+                'job__vehicle', 'job__assigned_to__user_color'
+            ).prefetch_related('job__safety_forms').filter(job__isnull=False)
+        else:
+            jobs_qs = _job_base_qs().filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct()
+            notes_qs = NoteModel.objects.select_related(
+                'job', 'job__client', 'job__assigned_to',
+                'job__vehicle', 'job__assigned_to__user_color'
+            ).prefetch_related('job__safety_forms').filter(
+                Q(staff=user) | Q(job__assigned_to=user),
+                job__isnull=False
+            ).distinct()
+
+        if filter_type == 'today':
+            notes_qs = notes_qs.filter(
+                scheduled_datetime__date=today
+            ).exclude(job__status=JobStatus.COMPLETED)
+        elif filter_type == 'upcoming':
+            notes_qs = notes_qs.filter(
+                scheduled_datetime__date__gt=today
+            ).exclude(job__status=JobStatus.COMPLETED)
+        elif filter_type == 'completed':
+            notes_qs = notes_qs.filter(job__status=JobStatus.COMPLETED)
+        elif filter_type == 'active':
+            notes_qs = notes_qs.filter(job__status=JobStatus.IN_PROGRESS)
+
+        entries = []
+        seen_job_ids = set()
+        for note in notes_qs.order_by('scheduled_datetime'):
+            job = note.job
+            seen_job_ids.add(job.id)
+            entries.append(_build_note_job_entry(note, job))
+
+        # Include jobs with no matching notes (only when not filtering by date-based criteria)
+        if filter_type not in ('today', 'upcoming'):
+            no_note_qs = jobs_qs.exclude(id__in=seen_job_ids)
+            if filter_type == 'completed':
+                no_note_qs = no_note_qs.filter(status=JobStatus.COMPLETED)
+            elif filter_type == 'active':
+                no_note_qs = no_note_qs.filter(status=JobStatus.IN_PROGRESS)
+            for job in no_note_qs.order_by('-created_at'):
+                entries.append(_build_job_entry_no_note(job))
+
+        return Response(JobListSerializer(entries, many=True).data)
 
 
 class EmployeeJobDetailView(RetrieveAPIView):
@@ -388,8 +489,10 @@ class EmployeeJobDetailView(RetrieveAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser or user.is_staff:
-            return Job.objects.all()
-        return Job.objects.filter(assigned_to=user)
+            return Job.objects.prefetch_related('notes__staff', 'notes__tasks')
+        return Job.objects.filter(
+            Q(assigned_to=user) | Q(notes__staff=user)
+        ).distinct().prefetch_related('notes__staff', 'notes__tasks')
 
     @extend_schema(tags=['jobs'], summary="Employee — retrieve job detail")
     def get(self, request, *args, **kwargs):
@@ -459,17 +562,6 @@ class JobAttachmentDeleteView(APIView):
         return Response({'message': 'Attachment deleted.'}, status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Job Photo Views — commented out (photos now submitted via reports app) ───
-# class JobPhotoUploadView(APIView):
-#     permission_classes = [IsAdminOrManagerOrEmployee]
-#     parser_classes = [MultiPartParser, FormParser]
-#     def post(self, request, id): ...
-#
-# class JobPhotoDeleteView(APIView):
-#     permission_classes = [IsAdminOrManager]
-#     def delete(self, request, id, photo_id): ...
-
-
 # ==================== LINE ITEMS ====================
 
 class JobLineItemView(APIView):
@@ -507,31 +599,33 @@ class JobLineItemDetailView(APIView):
         return Response({'message': 'Line item deleted.'}, status=status.HTTP_204_NO_CONTENT)
 
 
-# ── Job Task Views — commented out (tasks feature deferred) ──────────────────
-# class JobTaskView(APIView): ...
-# class JobTaskCompleteView(APIView): ...
+# ==================== JOB TASKS ====================
+
+class JobTasksView(APIView):
+    """GET /api/jobs/{id}/tasks/ — all tasks linked to Notes on this job."""
+    permission_classes = [IsAdminOrManager]
+
+    @extend_schema(tags=['jobs'], summary="List tasks for a job")
+    def get(self, request, id):
+        from notes.models import Task as NoteTask
+        from notes.serializers import TaskSerializer
+
+        job = get_object_or_404(Job, id=id)
+        tasks = NoteTask.objects.filter(
+            notes__job=job
+        ).distinct().select_related('staff', 'created_by')
+        return Response(TaskSerializer(tasks, many=True).data)
 
 
-# ── Job Note Views (chat feature deferred to WebSocket phase) ─
+# ==================== JOB NOTES (chat thread) ====================
+
 class JobNoteListView(APIView):
-    """
-    GET  /api/jobs/{id}/notes/
-    List all notes for a job, oldest first (natural chat order).
-
-    Access rules:
-    - Employee: only their assigned job
-    - Admin / Manager: any job
-    """
+    """GET /api/jobs/{id}/notes/ — list all chat notes for a job."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
     @extend_schema(
         tags=['jobs-notes'],
         summary="List job notes",
-        description=(
-            "Returns all notes for a job in chronological order. "
-            "Each note includes sender_role ('admin'/'manager'/'employee') and "
-            "is_mine (bool) so the frontend can render left/right chat bubbles."
-        ),
         responses={200: JobNoteSerializer(many=True)},
     )
     def get(self, request, id):
@@ -548,40 +642,31 @@ class JobNoteListView(APIView):
         user = request.user
         if user.is_superuser or user.is_staff:
             return get_object_or_404(Job, id=id)
-        # Employee can only see notes on their own job
-        return get_object_or_404(Job, id=id, assigned_to=user)
+        return get_object_or_404(
+            Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+            id=id
+        )
 
 
 class JobNoteSendView(APIView):
-    """
-    POST /api/jobs/{id}/notes/send/
-    Send a note on a job.
-
-    Access rules:
-    - Employee: only on their assigned job
-    - Admin / Manager: any job
-    Both sides use the same endpoint.
-    """
+    """POST /api/jobs/{id}/notes/send/ — send a chat note on a job."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
     @extend_schema(
         tags=['jobs-notes'],
         summary="Send job note",
-        description=(
-            "Send a message/note on a job thread. "
-            "Both employee and admin/manager use this same endpoint. "
-            "Returns the created note so the frontend can append it immediately."
-        ),
         request=JobNoteCreateSerializer,
         responses={201: JobNoteSerializer},
     )
     def post(self, request, id):
-        # Resolve job with access check
         user = request.user
         if user.is_superuser or user.is_staff:
             job = get_object_or_404(Job, id=id)
         else:
-            job = get_object_or_404(Job, id=id, assigned_to=user)
+            job = get_object_or_404(
+                Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+                id=id
+            )
 
         serializer = JobNoteCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -602,24 +687,14 @@ class JobNoteSendView(APIView):
 
 
 class JobNoteDeleteView(APIView):
-    """
-    DELETE /api/jobs/{id}/notes/{note_id}/
-    Admin/manager can delete any note.
-    Employee can only delete their own notes.
-    """
+    """DELETE /api/jobs/{id}/notes/{note_id}/ — delete a chat note."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
-    @extend_schema(
-        tags=['jobs-notes'],
-        summary="Delete a job note",
-        responses={204: None},
-    )
+    @extend_schema(tags=['jobs-notes'], summary="Delete a job note", responses={204: None})
     def delete(self, request, id, note_id):
         note = get_object_or_404(JobNote, id=note_id, job__id=id)
         user = request.user
 
-        # Admin/manager can delete anything
-        # Employee can only delete their own notes
         if not (user.is_superuser or user.is_staff):
             if note.sender != user:
                 return Response(
@@ -651,10 +726,7 @@ class JobActivityListView(ListAPIView):
 # ==================== EMPLOYEE JOB LIST VIEWS ====================
 
 class EmployeeMyJobsView(APIView):
-    """
-    GET — Returns employee's own jobs split into three lists:
-    today, upcoming, completed.
-    """
+    """GET — employee's own jobs split into today / upcoming / completed."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
     @extend_schema(
@@ -663,38 +735,46 @@ class EmployeeMyJobsView(APIView):
         responses={200: EmployeeJobListResponseSerializer}
     )
     def get(self, request):
+        from notes.models import Note as NoteModel
+
         user = request.user
-        now = timezone.now()
-        today = now.date()
+        today = timezone.now().date()
 
-        base_qs = Job.objects.filter(
-            assigned_to=user
-        ).select_related('client', 'vehicle').order_by('scheduled_datetime')
+        notes_qs = NoteModel.objects.select_related(
+            'job', 'job__client', 'job__assigned_to',
+            'job__vehicle', 'job__assigned_to__user_color'
+        ).prefetch_related('job__safety_forms').filter(
+            Q(staff=user) | Q(job__assigned_to=user),
+            job__isnull=False
+        ).distinct()
 
-        today_jobs = base_qs.filter(
+        today_notes = notes_qs.filter(
             scheduled_datetime__date=today
-        ).exclude(status=JobStatus.COMPLETED)
+        ).exclude(job__status=JobStatus.COMPLETED).order_by('scheduled_datetime')
 
-        upcoming_jobs = base_qs.filter(
+        upcoming_notes = notes_qs.filter(
             scheduled_datetime__date__gt=today
-        ).exclude(status=JobStatus.COMPLETED)
+        ).exclude(job__status=JobStatus.COMPLETED).order_by('scheduled_datetime')
 
-        completed_jobs = base_qs.filter(
+        today_entries = [_build_note_job_entry(n, n.job) for n in today_notes]
+        upcoming_entries = [_build_note_job_entry(n, n.job) for n in upcoming_notes]
+
+        # Completed: all jobs (with or without notes) accessible to user
+        completed_jobs = _job_base_qs().filter(
+            Q(assigned_to=user) | Q(notes__staff=user),
             status=JobStatus.COMPLETED
-        ).order_by('-scheduled_datetime')
+        ).distinct().order_by('-created_at')
+        completed_entries = [_build_job_entry_no_note(j) for j in completed_jobs]
 
         return Response({
-            'today': JobMinimalSerializer(today_jobs, many=True).data,
-            'upcoming': JobMinimalSerializer(upcoming_jobs, many=True).data,
-            'completed': JobMinimalSerializer(completed_jobs, many=True).data,
+            'today': JobMinimalSerializer(today_entries, many=True).data,
+            'upcoming': JobMinimalSerializer(upcoming_entries, many=True).data,
+            'completed': JobMinimalSerializer(completed_entries, many=True).data,
         }, status=status.HTTP_200_OK)
 
 
 class EmployeeCalendarJobsView(APIView):
-    """
-    GET — Returns employee's jobs for calendar view:
-    today, tomorrow, this_week (per-day dict Mon→Sun).
-    """
+    """GET — employee's jobs for calendar view: today / tomorrow / this_week."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
     @extend_schema(
@@ -703,92 +783,97 @@ class EmployeeCalendarJobsView(APIView):
         responses={200: EmployeeCalendarJobsSerializer}
     )
     def get(self, request):
+        from notes.models import Note as NoteModel
+
         user = request.user
         today = timezone.now().date()
         tomorrow = today + timedelta(days=1)
         start_of_week = today - timedelta(days=today.weekday())
 
-        base_qs = Job.objects.filter(
-            assigned_to=user
-        ).select_related('client', 'vehicle').order_by('scheduled_datetime')
+        week_end = start_of_week + timedelta(days=6)
 
-        today_jobs = base_qs.filter(scheduled_datetime__date=today)
-        tomorrow_jobs = base_qs.filter(scheduled_datetime__date=tomorrow)
+        notes_qs = NoteModel.objects.select_related(
+            'job', 'job__client', 'job__assigned_to',
+            'job__vehicle', 'job__assigned_to__user_color'
+        ).prefetch_related('job__safety_forms').filter(
+            Q(staff=user) | Q(job__assigned_to=user),
+            job__isnull=False,
+            scheduled_datetime__date__gte=start_of_week,
+            scheduled_datetime__date__lte=week_end,
+        ).distinct().order_by('scheduled_datetime')
+
+        all_notes = list(notes_qs)
+
+        def notes_for_date(d):
+            return [_build_note_job_entry(n, n.job) for n in all_notes if n.scheduled_datetime.date() == d]
+
+        today_entries = notes_for_date(today)
+        tomorrow_entries = notes_for_date(tomorrow)
 
         this_week = {}
         for i in range(7):
             day = start_of_week + timedelta(days=i)
             day_name = day.strftime('%A').lower()
-            day_jobs = base_qs.filter(scheduled_datetime__date=day)
-            this_week[day_name] = JobMinimalSerializer(day_jobs, many=True).data
+            this_week[day_name] = JobMinimalSerializer(notes_for_date(day), many=True).data
 
         return Response({
-            'today': JobMinimalSerializer(today_jobs, many=True).data,
-            'tomorrow': JobMinimalSerializer(tomorrow_jobs, many=True).data,
+            'today': JobMinimalSerializer(today_entries, many=True).data,
+            'tomorrow': JobMinimalSerializer(tomorrow_entries, many=True).data,
             'this_week': this_week,
         }, status=status.HTTP_200_OK)
 
 
 class EmployeeJobsByDateView(APIView):
-    """
-    GET /api/jobs/employee/jobs-by-date/
-
-    Returns the employee's jobs filtered by a specific date.
-    Date param is date only — time part is ignored.
-
-    Query param:
-        date=YYYY-MM-DD   e.g. ?date=2026-03-18
-
-    Employee → only their assigned jobs.
-    Admin/Manager → all jobs on that date.
-    """
+    """GET /api/jobs/employee/jobs-by-date/ — employee's jobs for a specific date."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
     @extend_schema(
         tags=['jobs-employee'],
         summary="My jobs by date",
-        description=(
-            "Filter employee jobs by a specific date. "
-            "Pass date as YYYY-MM-DD — time part is ignored. "
-            "Returns all jobs whose scheduled_datetime falls on that date."
-        ),
         parameters=[
-            OpenApiParameter(
-                'date',
-                str,
-                required=False,
-                description='Filter date in YYYY-MM-DD format. Omit to get all jobs.'
-            ),
+            OpenApiParameter('date', str, required=False, description='Filter date YYYY-MM-DD'),
         ],
         responses={200: JobMinimalSerializer(many=True)},
     )
     def get(self, request):
+        from notes.models import Note as NoteModel
+        from datetime import date as date_type
+
         user = request.user
 
         if user.is_superuser or user.is_staff:
-            qs = Job.objects.select_related('client', 'vehicle').all()
+            notes_qs = NoteModel.objects.select_related(
+                'job', 'job__client', 'job__assigned_to',
+                'job__vehicle', 'job__assigned_to__user_color'
+            ).prefetch_related('job__safety_forms').filter(job__isnull=False)
         else:
-            qs = Job.objects.filter(
-                assigned_to=user
-            ).select_related('client', 'vehicle')
+            notes_qs = NoteModel.objects.select_related(
+                'job', 'job__client', 'job__assigned_to',
+                'job__vehicle', 'job__assigned_to__user_color'
+            ).prefetch_related('job__safety_forms').filter(
+                Q(staff=user) | Q(job__assigned_to=user),
+                job__isnull=False
+            ).distinct()
 
         date_param = request.query_params.get('date')
-
         if date_param:
-            # Validate and parse — date only, time is irrelevant
-            from datetime import date as date_type
             try:
-                parsed = date_type.fromisoformat(date_param)  # expects YYYY-MM-DD
+                parsed = date_type.fromisoformat(date_param)
             except ValueError:
                 return Response(
                     {'error': 'Invalid date format. Use YYYY-MM-DD e.g. 2026-03-18'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            qs = qs.filter(scheduled_datetime__date=parsed)
+            notes_qs = notes_qs.filter(scheduled_datetime__date=parsed)
 
-        qs = qs.order_by('scheduled_datetime')
-        serializer = JobMinimalSerializer(qs, many=True, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        entries = [
+            _build_note_job_entry(n, n.job)
+            for n in notes_qs.order_by('scheduled_datetime')
+        ]
+        return Response(
+            JobMinimalSerializer(entries, many=True, context={'request': request}).data,
+            status=status.HTTP_200_OK
+        )
 
 
 class EmployeeJobDetailByIdView(RetrieveAPIView):
@@ -800,7 +885,9 @@ class EmployeeJobDetailByIdView(RetrieveAPIView):
         user = self.request.user
         if user.is_superuser or user.is_staff:
             return Job.objects.all()
-        return Job.objects.filter(assigned_to=user)
+        return Job.objects.filter(
+            Q(assigned_to=user) | Q(notes__staff=user)
+        ).distinct()
 
     def get_object(self):
         queryset = self.get_queryset()
@@ -808,7 +895,7 @@ class EmployeeJobDetailByIdView(RetrieveAPIView):
             queryset.select_related(
                 'client', 'vehicle', 'assigned_to'
             ).prefetch_related(
-                'attachments', 'safety_forms', 'job_reports'
+                'attachments', 'safety_forms', 'job_reports', 'notes'
             ),
             id=self.kwargs['id']
         )
@@ -835,25 +922,27 @@ class EmployeeStartJobView(APIView):
         responses={200: EmployeeJobDetailSerializer}
     )
     def post(self, request, id):
-        job = get_object_or_404(Job, id=id, assigned_to=request.user)
+        user = request.user
+        job = get_object_or_404(
+            Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+            id=id
+        )
 
         if job.status == JobStatus.IN_PROGRESS:
             return Response({'message': 'Job is already in progress.'}, status=status.HTTP_200_OK)
         if job.status == JobStatus.COMPLETED:
             return Response({'error': 'Job is already completed.'}, status=status.HTTP_400_BAD_REQUEST)
-        if job.status not in [JobStatus.PENDING, JobStatus.OVERDUE]:
+        if job.status not in [JobStatus.PENDING, JobStatus.OVERDUE, JobStatus.SCHEDULED]:
             return Response(
                 {'error': f'Cannot start a job with status "{job.status}".'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if job.status == JobStatus.PENDING:
-            job.status = JobStatus.IN_PROGRESS
-            job.save()
+        job.status = JobStatus.IN_PROGRESS
+        job.save()
 
         _log_activity(job, ActivityType.JOB_STARTED, request.user, "Job started by employee")
 
-        # Notify admins/managers           ← ADD THIS BLOCK
         try:
             from notifications.services import NotificationTemplates
             NotificationTemplates.job_started(job)
@@ -879,7 +968,11 @@ class EmployeeCompleteJobView(APIView):
         responses={200: EmployeeJobDetailSerializer}
     )
     def post(self, request, id):
-        job = get_object_or_404(Job, id=id, assigned_to=request.user)
+        user = request.user
+        job = get_object_or_404(
+            Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+            id=id
+        )
 
         if job.status == JobStatus.COMPLETED:
             return Response({'message': 'Job is already completed.'}, status=status.HTTP_200_OK)
@@ -915,15 +1008,16 @@ class EmployeeJobAttachmentDownloadView(APIView):
     """GET — Employee downloads a specific attachment from their assigned job."""
     permission_classes = [IsAdminOrManagerOrEmployee]
 
-    @extend_schema(
-        tags=['jobs-employee'],
-        summary="Download job attachment"
-    )
+    @extend_schema(tags=['jobs-employee'], summary="Download job attachment")
     def get(self, request, id, attachment_id):
-        if request.user.is_superuser or request.user.is_staff:
+        user = request.user
+        if user.is_superuser or user.is_staff:
             job = get_object_or_404(Job, id=id)
         else:
-            job = get_object_or_404(Job, id=id, assigned_to=request.user)
+            job = get_object_or_404(
+                Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+                id=id
+            )
 
         attachment = get_object_or_404(JobAttachment, id=attachment_id, job=job)
 
@@ -938,71 +1032,61 @@ class EmployeeJobAttachmentDownloadView(APIView):
             return Response({'error': 'File not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        
+
+
+# ==================== RECENT ACTIVITY ====================
+
 class RecentActivityView(APIView):
-    # Last 5 job activities for the admin dashboard card.
     permission_classes = [IsAdminOrManager]
 
     @extend_schema(
         tags=['jobs'],
         summary="Recent job activity feed (dashboard)",
-        request=RecentActivitySerializer,
         responses={200: RecentActivitySerializer(many=True)}
     )
     def get(self, request):
-        from .serializers import RecentActivitySerializer
         activities = (
             JobActivity.objects
             .select_related('job', 'actor')
             .order_by('-created_at')[:5]
         )
         return Response(RecentActivitySerializer(activities, many=True).data)
-    
-    
+
+
+# ==================== EMPLOYEE VEHICLES ====================
+
 class EmployeeVehicleListView(APIView):
     """
     GET /api/jobs/employee/my-vehicles/
- 
-    Returns unique vehicles from the requesting employee's assigned jobs.
-    If two jobs share the same vehicle it appears only once.
- 
-    Employee → only vehicles from their own jobs.
-    Admin/Manager → all vehicles across all jobs.
+    Returns unique vehicles from the requesting employee's accessible jobs.
     """
     permission_classes = [IsAdminOrManagerOrEmployee]
- 
+
     @extend_schema(
         tags=['jobs-employee'],
         summary="My vehicles",
-        description=(
-            "Returns unique vehicles attached to the employee's assigned jobs. "
-            "Fields: id, name, plate, picture, status, next_service, last_inspection_date."
-        ),
     )
     def get(self, request):
         from fleets.models import Vehicle as VehicleModel
- 
+
         user = request.user
- 
+
         if user.is_superuser or user.is_staff:
             jobs_qs = Job.objects.select_related('vehicle').exclude(vehicle__isnull=True)
         else:
             jobs_qs = Job.objects.filter(
-                assigned_to=user
-            ).select_related('vehicle').exclude(vehicle__isnull=True)
- 
-        # Collect unique vehicle IDs from the jobs
+                Q(assigned_to=user) | Q(notes__staff=user)
+            ).distinct().select_related('vehicle').exclude(vehicle__isnull=True)
+
         vehicle_ids = list(
             jobs_qs.values_list('vehicle_id', flat=True).distinct()
         )
- 
-        # Single query with inspection prefetch — no N+1
+
         vehicles = VehicleModel.objects.filter(
             id__in=vehicle_ids
         ).prefetch_related('inspections').order_by('name')
- 
+
         serializer = EmployeeVehicleSerializer(
             vehicles, many=True, context={'request': request}
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)    
+        return Response(serializer.data, status=status.HTTP_200_OK)

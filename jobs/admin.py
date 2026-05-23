@@ -30,7 +30,7 @@ class JobActivityInline(admin.TabularInline):
 class JobAdmin(admin.ModelAdmin):
     list_display = [
         'job_id', 'job_name', 'status_badge', 'priority',
-        'client', 'assigned_to', 'scheduled_datetime', 'created_at',
+        'client', 'assigned_to', 'created_at',
     ]
     list_filter = ['status', 'priority']
     search_fields = ['job_id', 'job_name', 'client__name', 'assigned_to__email']
@@ -42,9 +42,6 @@ class JobAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Job Info', {
             'fields': ('id', 'job_id', 'job_name', 'job_details', 'priority', 'status'),
-        }),
-        ('Scheduling', {
-            'fields': ('scheduled_datetime',),
         }),
         ('Assignments', {
             'fields': ('client', 'assigned_to', 'assigned_managers', 'vehicle'),

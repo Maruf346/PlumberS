@@ -179,20 +179,22 @@ class NotificationTemplates:
     @staticmethod
     def job_started(job):
         """Notify managers when employee starts a job."""
+        actor = job.assigned_to.full_name if job.assigned_to else 'An employee'
         NotificationService.send_to_admins(
             notification_type=NotificationType.JOB_STARTED,
             title='Job Started',
-            body=f'{job.assigned_to.full_name} started job {job.job_id}: {job.job_name}.',
+            body=f'{actor} started job {job.job_id}: {job.job_name}.',
             data={'job_id': str(job.id), 'job_ref': job.job_id},
         )
 
     @staticmethod
     def job_completed(job):
         """Notify managers when employee completes a job."""
+        actor = job.assigned_to.full_name if job.assigned_to else 'An employee'
         NotificationService.send_to_admins(
             notification_type=NotificationType.JOB_COMPLETED,
             title='Job Completed',
-            body=f'{job.assigned_to.full_name} completed job {job.job_id}: {job.job_name}.',
+            body=f'{actor} completed job {job.job_id}: {job.job_name}.',
             data={'job_id': str(job.id), 'job_ref': job.job_id},
         )
 
@@ -223,9 +225,27 @@ class NotificationTemplates:
             user=user,
             notification_type=NotificationType.JOB_RESCHEDULED,
             title='Job Rescheduled',
-            body=f'Job {job.job_id} has been rescheduled to {job.scheduled_datetime.strftime("%d %b %Y, %I:%M %p") if job.scheduled_datetime else "TBD"}.',
+            body=f'Job {job.job_id} ({job.job_name}) has been rescheduled.',
             data={'job_id': str(job.id), 'job_ref': job.job_id},
             priority=NotificationPriority.NORMAL,
+        )
+
+    @staticmethod
+    def note_assigned(user, note):
+        """Notify a staff member when they are assigned to a schedule note."""
+        job_ref = f' for job {note.job.job_id}' if note.job else ''
+        title_part = note.title or 'a schedule'
+        NotificationService.send_notification(
+            user=user,
+            notification_type=NotificationType.NOTE_ASSIGNED,
+            title='New Schedule Assigned',
+            body=f'You have been assigned to {title_part}{job_ref}.',
+            data={
+                'note_id': str(note.id),
+                'job_id': str(note.job.id) if note.job else None,
+                'job_ref': note.job.job_id if note.job else None,
+            },
+            priority=NotificationPriority.HIGH,
         )
 
     # ==================== SAFETY FORMS ====================

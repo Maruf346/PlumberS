@@ -21,6 +21,7 @@ urlpatterns = [
     path('inspections/', include('fleet_inspections.urls')),
     path('reports/', include('reports.urls')),
     path('notification/', include('notifications.urls')),
+    path('notes/', include('notes.urls')),
     path('jobs/<uuid:job_id>/reports/', JobReportListView.as_view(), name='job-reports'),
     
     #JWT endpoints

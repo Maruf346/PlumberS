@@ -18,6 +18,7 @@ class NotificationType(models.TextChoices):
     JOB_COMPLETED = 'job_completed', 'Job Completed'
     JOB_OVERDUE = 'job_overdue', 'Job Overdue'
     JOB_RESCHEDULED = 'job_rescheduled', 'Job Rescheduled'
+    NOTE_ASSIGNED = 'note_assigned', 'Note Assigned'
 
     # Reports                          ← ADD THIS BLOCK
     REPORT_SUBMITTED = 'report_submitted', 'Report Submitted'

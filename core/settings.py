@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'fleet_inspections',
     'jobs',
     'reports',
+    'notes',
 ]
 
 MIDDLEWARE = [

@@ -65,10 +65,12 @@ REPORT_REGISTRY = {
 # ==================== SHARED HELPERS ====================
 
 def _get_job_report_for_employee(job_report_id, user):
+    from django.db.models import Q
     return get_object_or_404(
-        JobReport.objects.select_related('job', 'job__client', 'job__assigned_to'),
+        JobReport.objects.select_related('job', 'job__client', 'job__assigned_to').filter(
+            Q(job__assigned_to=user) | Q(job__notes__staff=user)
+        ).distinct(),
         id=job_report_id,
-        job__assigned_to=user
     )
 
 

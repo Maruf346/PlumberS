@@ -9,23 +9,28 @@ logger = logging.getLogger(__name__)
 def mark_overdue_jobs():
     """
     Runs every 30 minutes via Celery beat.
-    Marks any PENDING or IN_PROGRESS job past its scheduled_datetime as OVERDUE.
-    COMPLETED jobs are never marked overdue.
+    A job is overdue when its earliest scheduled Note is in the past and
+    the job status is still active (not COMPLETED or CANCELLED).
+    COMPLETED/CANCELLED jobs are never marked overdue.
     """
     from .models import Job, JobStatus
+    from notes.models import Note
 
     now = timezone.now()
+    skip_statuses = [JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.OVERDUE]
 
-    # ── Step 1: Mark newly overdue ────────────────────────────────────────────
-    newly_overdue = Job.objects.filter(
-        scheduled_datetime__lt=now
+    # ── Step 1: Mark newly overdue ───────────────────────────────────────────
+    # Jobs whose earliest note is in the past and aren't already resolved
+    overdue_job_ids = Note.objects.filter(
+        job__isnull=False,
+        scheduled_datetime__lt=now,
     ).exclude(
-        status__in=[JobStatus.COMPLETED, JobStatus.OVERDUE]
-    )
+        job__status__in=skip_statuses
+    ).values_list('job_id', flat=True).distinct()
 
+    newly_overdue = Job.objects.filter(id__in=overdue_job_ids)
     overdue_count = 0
     for job in newly_overdue:
-        # Remember what status the job was in before going overdue
         job.pre_overdue_status = job.status
         job.status = JobStatus.OVERDUE
         job.save(update_fields=['status', 'pre_overdue_status'])
@@ -34,20 +39,21 @@ def mark_overdue_jobs():
     if overdue_count:
         logger.info(f'Marked {overdue_count} job(s) as overdue.')
 
-    # ── Step 2: Restore rescheduled jobs ──────────────────────────────────────
-    rescheduled = Job.objects.filter(
-        status=JobStatus.OVERDUE,
-        scheduled_datetime__gt=now
-    )
-
+    # ── Step 2: Restore jobs whose notes are all rescheduled to future ───────
+    # An OVERDUE job should be restored if all its notes are now in the future
+    overdue_jobs = Job.objects.filter(status=JobStatus.OVERDUE)
     rescheduled_count = 0
-    for job in rescheduled:
-        # Restore to whatever it was before — PENDING or IN_PROGRESS
-        restore_to = job.pre_overdue_status or JobStatus.PENDING
-        job.status = restore_to
-        job.pre_overdue_status = None   # clear it
-        job.save(update_fields=['status', 'pre_overdue_status'])
-        rescheduled_count += 1
+    for job in overdue_jobs:
+        has_past_note = Note.objects.filter(
+            job=job,
+            scheduled_datetime__lt=now,
+        ).exists()
+        if not has_past_note:
+            restore_to = job.pre_overdue_status or JobStatus.PENDING
+            job.status = restore_to
+            job.pre_overdue_status = None
+            job.save(update_fields=['status', 'pre_overdue_status'])
+            rescheduled_count += 1
 
     if rescheduled_count:
         logger.info(f'Restored {rescheduled_count} job(s) from OVERDUE.')
