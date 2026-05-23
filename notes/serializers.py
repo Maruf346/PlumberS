@@ -99,6 +99,8 @@ class NoteSerializer(serializers.ModelSerializer):
             'job_id': obj.job.job_id,
             'job_name': obj.job.job_name,
             'status': obj.job.status,
+            'client_name': obj.job.client.name,
+            'address': obj.job.insured_address,
         }
 
 
