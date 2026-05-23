@@ -14,6 +14,7 @@ from django.http import FileResponse
 from .models import *
 from .serializers import *
 from user.permissions import IsAdmin, IsAdminOrManager, IsAdminOrManagerOrEmployee
+from core.pagination import FlexiblePageNumberPagination
 
 
 def _log_activity(job, activity_type, actor, description=''):
@@ -79,6 +80,14 @@ def _build_job_entry_no_note(job):
         safety_form_count=len(job.safety_forms.all()),
         created_at=job.created_at,
     )
+
+
+def _paginate(entries, request, serializer_class):
+    paginator = FlexiblePageNumberPagination()
+    page = paginator.paginate_queryset(entries, request)
+    if page is not None:
+        return paginator.get_paginated_response(serializer_class(page, many=True).data)
+    return Response(serializer_class(entries, many=True).data)
 
 
 def _job_base_qs():
@@ -216,7 +225,7 @@ class AdminJobListView(APIView):
             elif not parsed_date:
                 entries.append(_build_job_entry_no_note(job))
 
-        return Response(JobListSerializer(entries, many=True).data)
+        return _paginate(entries, request, JobListSerializer)
 
 
 class AdminJobListUniqueView(APIView):
@@ -267,7 +276,7 @@ class AdminJobListUniqueView(APIView):
             else:
                 entries.append(_build_job_entry_no_note(job))
 
-        return Response(JobListSerializer(entries, many=True).data)
+        return _paginate(entries, request, JobListSerializer)
 
 
 class AdminJobDetailView(RetrieveAPIView):
@@ -477,7 +486,7 @@ class EmployeeJobListView(APIView):
             for job in no_note_qs.order_by('-created_at'):
                 entries.append(_build_job_entry_no_note(job))
 
-        return Response(JobListSerializer(entries, many=True).data)
+        return _paginate(entries, request, JobListSerializer)
 
 
 class EmployeeJobDetailView(RetrieveAPIView):
