@@ -626,6 +626,92 @@ class JobTasksView(APIView):
         return Response(TaskSerializer(tasks, many=True).data)
 
 
+
+# ==================== ADMIN NOTES + TASKS OVERVIEW ====================
+
+class AdminJobNotesAndTasksView(APIView):
+    """
+    GET /api/jobs/<uuid:id>/overview/
+    Admin-only. Returns all Note schedule slots and every Task linked to
+    those notes for the given job, in a single structured response.
+
+    Response shape:
+    {
+        "id": "<job-uuid>",
+        "job_id": "JB-1023",
+        "job_name": "...",
+        "status": "...",
+        "priority": "...",
+        "notes_count": 3,
+        "tasks_count": 5,
+        "notes": [
+            {
+                "note_id": "...",
+                "title": "...",
+                "description": "...",
+                "scheduled_datetime": "...",
+                "end_time": "...",
+                "staff": [ { "id", "full_name", "email", "profile_picture" } ],
+                "tasks": [ { "id", "name", "description", "due_date",
+                             "estimated_cost", "staff", "created_by_name",
+                             "created_at", "updated_at" } ],
+                "created_by_name": "...",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        ],
+        "task_summary": [
+            # flat, de-duplicated list of every Task across all notes
+            { "id", "name", "description", ... }
+        ]
+    }
+    """
+    permission_classes = [IsAdmin]
+
+    @extend_schema(
+        tags=['jobs'],
+        summary="Admin — notes & tasks overview for a job",
+        responses={200: AdminJobNotesAndTasksSerializer},
+    )
+    def get(self, request, id):
+        from notes.models import Note as NoteModel, Task as NoteTask
+
+        job = get_object_or_404(
+            Job.objects.select_related('client', 'assigned_to', 'vehicle'),
+            id=id,
+        )
+
+        notes = (
+            NoteModel.objects
+            .filter(job=job)
+            .prefetch_related('staff', 'tasks__staff', 'tasks__created_by', 'created_by')
+            .order_by('scheduled_datetime')
+        )
+
+        # Flat, de-duplicated task list across all notes for this job
+        tasks_qs = (
+            NoteTask.objects
+            .filter(notes__job=job)
+            .distinct()
+            .select_related('staff', 'created_by')
+        )
+
+        payload = {
+            'id': job.id,
+            'job_id': job.job_id,
+            'job_name': job.job_name,
+            'status': job.status,
+            'priority': job.priority,
+            'notes_count': notes.count(),
+            'tasks_count': tasks_qs.count(),
+            'notes': notes,
+            'task_summary': tasks_qs,
+        }
+
+        serializer = AdminJobNotesAndTasksSerializer(payload)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 # ==================== JOB NOTES (chat thread) ====================
 
 class JobNoteListView(APIView):

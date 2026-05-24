@@ -14,6 +14,7 @@ urlpatterns = [
     path('<uuid:id>/schedule/', JobScheduleView.as_view(), name='job-schedule'),
     path('<uuid:id>/admin-status/', AdminJobStatusUpdateView.as_view(), name='admin-job-status-update'),
     path('<uuid:id>/tasks/', JobTasksView.as_view(), name='job-tasks'),
+    path('<uuid:id>/overview/', AdminJobNotesAndTasksView.as_view(), name='admin-job-overview'),
 
     # ── Employee views ───────────────────────────────────────────────────────
     path('my/', EmployeeJobListView.as_view(), name='employee-job-list'),

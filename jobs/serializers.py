@@ -162,6 +162,85 @@ class JobMinimalSerializer(serializers.Serializer):
     site_access_info = serializers.CharField()
 
 
+# ==================== ADMIN JOB NOTES + TASKS OVERVIEW ====================
+
+class AdminJobTaskOverviewSerializer(serializers.Serializer):
+    """
+    A Task as seen inside a Note, for the admin notes+tasks overview endpoint.
+    """
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    due_date = serializers.DateField(allow_null=True)
+    estimated_cost = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    staff = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+    def get_staff(self, obj):
+        if not obj.staff:
+            return None
+        return {
+            'id': str(obj.staff.id),
+            'full_name': obj.staff.full_name,
+            'email': obj.staff.email,
+        }
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by else None
+
+
+class AdminJobNoteOverviewSerializer(serializers.Serializer):
+    """
+    A Note (schedule slot) with its full staff list and all linked Tasks,
+    for the admin notes+tasks overview endpoint.
+    """
+    note_id = serializers.UUIDField(source='id')
+    title = serializers.CharField()
+    description = serializers.CharField()
+    scheduled_datetime = serializers.DateTimeField(allow_null=True)
+    end_time = serializers.DateTimeField(allow_null=True)
+    staff = serializers.SerializerMethodField()
+    tasks = AdminJobTaskOverviewSerializer(many=True, read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+    def get_staff(self, obj):
+        return [
+            {
+                'id': str(u.id),
+                'full_name': u.full_name,
+                'email': u.email,
+                'profile_picture': u.profile_picture.url if u.profile_picture else None,
+            }
+            for u in obj.staff.all()
+        ]
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by else None
+
+
+class AdminJobNotesAndTasksSerializer(serializers.Serializer):
+    """
+    Admin-only overview: all Notes and Tasks for a job.
+    Returns:
+      - job_id / id / job_name / status — quick job identifiers
+      - notes: list of Note schedule slots, each with their staff and tasks
+      - task_summary: flat de-duplicated list of every Task across all notes
+    """
+    id = serializers.UUIDField()
+    job_id = serializers.CharField()
+    job_name = serializers.CharField()
+    status = serializers.CharField()
+    priority = serializers.CharField()
+    notes_count = serializers.IntegerField()
+    tasks_count = serializers.IntegerField()
+    notes = AdminJobNoteOverviewSerializer(many=True)
+    task_summary = AdminJobTaskOverviewSerializer(many=True)
+
+
 # ==================== JOB DETAIL SERIALIZER ====================
 
 class JobDetailSerializer(serializers.ModelSerializer):
