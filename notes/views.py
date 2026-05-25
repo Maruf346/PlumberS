@@ -136,16 +136,17 @@ class TaskListCreateView(APIView):
     @extend_schema(
         tags=['tasks'],
         summary="List all tasks",
-        parameters=[OpenApiParameter('job_id', str, description='Filter by job UUID')],
         responses={200: TaskSerializer(many=True)},
     )
     def get(self, request):
-        qs = Task.objects.select_related('staff', 'created_by')
+        from core.pagination import FlexiblePageNumberPagination
 
-        job_id = request.query_params.get('job_id')
-        if job_id:
-            qs = qs.filter(notes__job__id=job_id).distinct()
+        qs = Task.objects.select_related('staff', 'created_by').order_by('-created_at')
 
+        paginator = FlexiblePageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        if page is not None:
+            return paginator.get_paginated_response(TaskSerializer(page, many=True).data)
         return Response(TaskSerializer(qs, many=True).data)
 
     @extend_schema(
