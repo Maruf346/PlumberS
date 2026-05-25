@@ -239,7 +239,7 @@ class AdminJobListUniqueView(APIView):
             OpenApiParameter('status', str, description='Filter by job status'),
             OpenApiParameter('priority', str, description='Filter by priority'),
             OpenApiParameter('assigned_to', str, description='Filter by employee UUID'),
-            OpenApiParameter('search', str, description='Search by job ID, name, or client'),
+            OpenApiParameter('search', str, description='Search by job ID, name, client, or insured address'),
         ]
     )
     def get(self, request):
@@ -262,7 +262,8 @@ class AdminJobListUniqueView(APIView):
             jobs_qs = jobs_qs.filter(
                 Q(job_id__icontains=search) |
                 Q(job_name__icontains=search) |
-                Q(client__name__icontains=search)
+                Q(client__name__icontains=search) |
+                Q(insured_address__icontains=search)
             )
 
         entries = []
