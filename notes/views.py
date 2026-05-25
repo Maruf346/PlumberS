@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from user.permissions import IsAdminOrManager
@@ -136,12 +137,22 @@ class TaskListCreateView(APIView):
     @extend_schema(
         tags=['tasks'],
         summary="List all tasks",
+        parameters=[
+            OpenApiParameter('search', str, description='Search by task name or description'),
+        ],
         responses={200: TaskSerializer(many=True)},
     )
     def get(self, request):
         from core.pagination import FlexiblePageNumberPagination
 
         qs = Task.objects.select_related('staff', 'created_by').order_by('-created_at')
+
+        search = request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) |
+                Q(description__icontains=search)
+            )
 
         paginator = FlexiblePageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
