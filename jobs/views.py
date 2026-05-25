@@ -622,8 +622,9 @@ class JobTasksView(APIView):
         job = get_object_or_404(Job, id=id)
         tasks = NoteTask.objects.filter(
             notes__job=job
-        ).distinct().select_related('staff', 'created_by')
-        return Response(TaskSerializer(tasks, many=True).data)
+        ).distinct().select_related('staff', 'created_by').order_by('-created_at')
+
+        return _paginate(tasks, request, TaskSerializer)
 
 
 
