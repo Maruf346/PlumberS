@@ -23,6 +23,7 @@ class NoteListCreateView(APIView):
             OpenApiParameter('date', str, description='Filter by scheduled date YYYY-MM-DD'),
             OpenApiParameter('staff_id', str, description='Filter by staff UUID'),
             OpenApiParameter('unassigned', str, description='true = notes with no staff'),
+            OpenApiParameter('unscheduled', str, description='true = notes with no scheduled_datetime and no end_time'),
         ],
         responses={200: NoteSerializer(many=True)},
     )
@@ -52,6 +53,10 @@ class NoteListCreateView(APIView):
         unassigned = request.query_params.get('unassigned')
         if unassigned and unassigned.lower() == 'true':
             qs = qs.filter(staff__isnull=True)
+
+        unscheduled = request.query_params.get('unscheduled')
+        if unscheduled and unscheduled.lower() == 'true':
+            qs = qs.filter(scheduled_datetime__isnull=True, end_time__isnull=True)
 
         qs = qs.distinct().order_by('scheduled_datetime')
         return Response(NoteSerializer(qs, many=True).data)
