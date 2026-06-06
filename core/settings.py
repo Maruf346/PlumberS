@@ -266,11 +266,11 @@ if USE_S3_MEDIA:
     AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', 'plumbers-media')
     AWS_S3_REGION_NAME      = os.getenv('AWS_S3_REGION_NAME', 'eu-north-1')
     AWS_S3_CUSTOM_DOMAIN    = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
-    AWS_DEFAULT_ACL         = 'public-read'
+    AWS_QUERYSTRING_AUTH    = False
     AWS_S3_OBJECT_PARAMETERS = {
         'CacheControl': 'max-age=86400',  # 1 day cache on media files
     }
-    AWS_QUERYSTRING_AUTH = False  # Public URLs — no signed query strings
+    # ← REMOVED: AWS_DEFAULT_ACL = 'public-read'
 
     MEDIA_URL  = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
     MEDIA_ROOT = ''  # Not used when S3 is active
@@ -282,9 +282,9 @@ if USE_S3_MEDIA:
                 "bucket_name": AWS_STORAGE_BUCKET_NAME,
                 "region_name": AWS_S3_REGION_NAME,
                 "location": "media",        # all uploads go into /media/ prefix in the bucket
-                "default_acl": "public-read",
                 "querystring_auth": False,
                 "file_overwrite": False,    # never overwrite existing files — add suffix instead
+                # ← REMOVED: "default_acl": "public-read",
             },
         },
         "staticfiles": {
