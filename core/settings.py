@@ -245,15 +245,66 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 # Static and media files settings
+# ── Static files ──────────────────────────────────────────────────────────────
 STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL  = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# WhiteNoise serves static files in both dev and prod
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# WhiteNoise — serves static files efficiently in production
-# Already have whitenoise in MIDDLEWARE, this adds compression + caching
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# ── Media files ───────────────────────────────────────────────────────────────
+# Local dev: files saved to /media/ folder on disk
+# Production: files saved to S3 bucket
+# Controlled by USE_S3_MEDIA env var
+
+USE_S3_MEDIA = os.getenv('USE_S3_MEDIA', 'False') == 'True'
+
+if USE_S3_MEDIA:
+    # S3 media storage — production only
+    AWS_ACCESS_KEY_ID       = os.getenv('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY   = os.getenv('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', 'plumbers-media')
+    AWS_S3_REGION_NAME      = os.getenv('AWS_S3_REGION_NAME', 'eu-north-1')
+    AWS_S3_CUSTOM_DOMAIN    = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
+    AWS_DEFAULT_ACL         = 'public-read'
+    AWS_S3_OBJECT_PARAMETERS = {
+        'CacheControl': 'max-age=86400',  # 1 day cache on media files
+    }
+    AWS_QUERYSTRING_AUTH = False  # Public URLs — no signed query strings
+
+    MEDIA_URL  = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+    MEDIA_ROOT = ''  # Not used when S3 is active
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "bucket_name": AWS_STORAGE_BUCKET_NAME,
+                "region_name": AWS_S3_REGION_NAME,
+                "location": "media",        # all uploads go into /media/ prefix in the bucket
+                "default_acl": "public-read",
+                "querystring_auth": False,
+                "file_overwrite": False,    # never overwrite existing files — add suffix instead
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+else:
+    # Local development — use local filesystem
+    MEDIA_URL  = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+    
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
