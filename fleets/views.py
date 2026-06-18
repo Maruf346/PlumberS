@@ -97,7 +97,7 @@ class VehicleListView(ListAPIView):
     serializer_class = VehicleListSerializer
 
     def get_queryset(self):
-        qs = Vehicle.objects.all().prefetch_related('employee_profile_set__user')
+        qs = Vehicle.objects.all().prefetch_related('employeeprofile_set__user')
 
         # Inactive filter — admin only
         if not (

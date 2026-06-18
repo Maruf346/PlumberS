@@ -38,9 +38,9 @@ class VehicleListSerializer(serializers.ModelSerializer):
 
     def get_assigned_employee(self, obj):
         # Assuming EmployeeProfile has a ForeignKey to Vehicle named 'assigned_vehicle'
-        # and the default reverse relation on Vehicle is 'employee_profile_set'.
+        # and the default reverse relation on Vehicle is 'employeeprofile_set'.
         # We filter for active users and take the first assigned employee if multiple exist.
-        employee_profile = obj.employee_profile_set.filter(user__is_active=True).first()
+        employee_profile = obj.employeeprofile_set.filter(user__is_active=True).first()
         if employee_profile and employee_profile.user:
             return employee_profile.user.full_name
         return None
