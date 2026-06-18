@@ -22,6 +22,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
     last_inspection_date = serializers.ReadOnlyField()
     km_until_service = serializers.ReadOnlyField()
     is_service_overdue = serializers.ReadOnlyField()
+    assigned_employee = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
@@ -31,9 +32,18 @@ class VehicleListSerializer(serializers.ModelSerializer):
             'current_odometer_km', 'next_service_km',
             'km_until_service', 'is_service_overdue',
             'registration_due', 'service_due',
-            'is_active', 'created_at'
+            'is_active', 'created_at',
+            'assigned_employee',
         ]
 
+    def get_assigned_employee(self, obj):
+        # Assuming EmployeeProfile has a ForeignKey to Vehicle named 'assigned_vehicle'
+        # and the default reverse relation on Vehicle is 'employee_profile_set'.
+        # We filter for active users and take the first assigned employee if multiple exist.
+        employee_profile = obj.employee_profile_set.filter(user__is_active=True).first()
+        if employee_profile and employee_profile.user:
+            return employee_profile.user.full_name
+        return None
 
 class VehicleDetailSerializer(serializers.ModelSerializer):
     """Full detail — used in retrieve view."""

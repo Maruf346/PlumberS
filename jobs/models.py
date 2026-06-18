@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import uuid
+from django_ckeditor_5.fields import CKEditor5Field
 
 
 class JobStatus(models.TextChoices):
@@ -87,7 +88,7 @@ class Job(models.Model):
 
     # Core details
     job_name = models.CharField(max_length=200, blank=True)
-    job_details = models.TextField(blank=True)
+    job_details = CKEditor5Field('Job Details', config_name='extends', blank=True)
     
     # Insured details — filled manually by admin at job creation
     insured_name = models.CharField(max_length=150, blank=True)
