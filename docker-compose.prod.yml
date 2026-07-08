@@ -65,7 +65,7 @@ services:
       - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME}
       - AWS_S3_REGION_NAME=${AWS_S3_REGION_NAME}
     volumes:
-      - media_data:/app/media
+      # - media_data:/app/media
     depends_on:
       redis:
         condition: service_healthy
