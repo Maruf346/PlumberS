@@ -63,10 +63,13 @@ jobs:
             echo "Cleaning up old Docker images..."
             docker image prune -f
 
+            echo "Reloading host Nginx..."
+            sudo systemctl reload nginx
+
             echo "=== Deployment complete ==="
           EOF
 
       - name: Deployment Status
         run: |
-          echo "Deployed to http://${{ secrets.EC2_HOST }}"
-          echo "Swagger docs: http://${{ secrets.EC2_HOST }}/api/docs/"
+          echo "Deployed to https://api.adlplumb.com.au"
+          echo "Swagger docs: https://api.adlplumb.com.au/api/docs/"

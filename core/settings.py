@@ -125,6 +125,10 @@ CSRF_TRUSTED_ORIGINS = [
     f"https://{host}" for host in ALLOWED_HOSTS if host not in ('localhost', '127.0.0.1', '')
 ] + [
     "http://plumbers-dashboard.s3-website.eu-north-1.amazonaws.com"
+] + [
+    "https://admin.adlplumb.com.au"
+] + [
+    "https://api.adlplumb.com.au"
 ]
 
 

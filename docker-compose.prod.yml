@@ -92,25 +92,25 @@ services:
     networks:
       - plumbers_net
 
-  nginx:
-    image: nginx:alpine
-    container_name: plumbers_nginx_prod
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_data:/app/staticfiles:ro
-      - media_data:/app/media:ro
-    depends_on:
-      - django
-    networks:
-      - plumbers_net
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: plumbers_nginx_prod
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - static_data:/app/staticfiles:ro
+  #     - media_data:/app/media:ro
+  #   depends_on:
+  #     - django
+  #   networks:
+  #     - plumbers_net
 
 volumes:
   redis_data:
-  media_data:
-  static_data:
+  # media_data:
+  # static_data:
 
 networks:
   plumbers_net:
