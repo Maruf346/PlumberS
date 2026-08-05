@@ -238,7 +238,7 @@ APPLE_CLIENT_ID = os.getenv('APPLE_CLIENT_ID')
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Australia/Adelaide'
 
 USE_I18N = True
 
