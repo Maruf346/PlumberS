@@ -276,12 +276,10 @@ class JobDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_scheduled_datetime(self, obj):
-        note = obj.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
-        return note.scheduled_datetime if note else None
+        return obj.scheduled_datetime
 
     def get_end_time(self, obj):
-        note = obj.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
-        return note.end_time if note else None
+        return obj.end_time
 
     def get_schedules(self, obj):
         notes = obj.notes.prefetch_related('staff', 'tasks').order_by('scheduled_datetime')
@@ -608,12 +606,10 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_scheduled_datetime(self, obj):
-        note = obj.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
-        return note.scheduled_datetime if note else None
+        return obj.scheduled_datetime
 
     def get_end_time(self, obj):
-        note = obj.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
-        return note.end_time if note else None
+        return obj.end_time
 
     def get_my_schedules(self, obj):
         request = self.context.get('request')

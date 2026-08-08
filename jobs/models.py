@@ -180,9 +180,7 @@ class Job(models.Model):
         return "JB-1001"
 
     def check_overdue(self):
-        earliest = self.notes.filter(
-            scheduled_datetime__isnull=False
-        ).order_by('scheduled_datetime').values_list('scheduled_datetime', flat=True).first()
+        earliest = self.scheduled_datetime
         if (
             earliest and
             timezone.now() > earliest and
@@ -190,6 +188,16 @@ class Job(models.Model):
         ):
             self.status = JobStatus.OVERDUE
             Job.objects.filter(pk=self.pk).update(status=JobStatus.OVERDUE)
+
+    @property
+    def scheduled_datetime(self):
+        note = self.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
+        return note.scheduled_datetime if note else None
+
+    @property
+    def end_time(self):
+        note = self.notes.filter(scheduled_datetime__isnull=False).order_by('scheduled_datetime').first()
+        return note.end_time if note else None
 
     @property
     def is_overdue(self):
