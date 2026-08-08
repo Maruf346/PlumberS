@@ -17,6 +17,7 @@ class NotificationType(models.TextChoices):
     JOB_STARTED = 'job_started', 'Job Started'
     JOB_COMPLETED = 'job_completed', 'Job Completed'
     JOB_OVERDUE = 'job_overdue', 'Job Overdue'
+    JOB_REOPENED = 'job_reopened', 'Job Reopened'
     JOB_RESCHEDULED = 'job_rescheduled', 'Job Rescheduled'
     NOTE_ASSIGNED = 'note_assigned', 'Note Assigned'
 

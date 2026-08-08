@@ -1110,6 +1110,12 @@ class EmployeeReopenJobView(APIView):
 
         _log_activity(job, ActivityType.STATUS_CHANGED, request.user, "Job reopened by user")
 
+        try:
+            from notifications.services import NotificationTemplates
+            NotificationTemplates.job_reopened(job, request.user)
+        except Exception:
+            pass
+
         return Response(
             {
                 'message': 'Job reopened successfully.',

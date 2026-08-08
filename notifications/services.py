@@ -199,6 +199,24 @@ class NotificationTemplates:
         )
 
     @staticmethod
+    def job_reopened(job, actor=None):
+        """Notify managers when a completed job is reopened."""
+        if actor:
+            actor_name = actor.full_name or actor.email
+        else:
+            actor_name = 'A user'
+        NotificationService.send_to_admins(
+            notification_type=NotificationType.JOB_REOPENED,
+            title='Job Reopened',
+            body=f'{actor_name} reopened job {job.job_id}: {job.job_name}.',
+            data={
+                'job_id': str(job.id),
+                'job_ref': job.job_id,
+                'actor_id': str(actor.id) if actor else None,
+            },
+        )
+
+    @staticmethod
     def job_overdue(job):
         """Notify assigned employee and managers when a job goes overdue."""
         # Notify employee
