@@ -541,7 +541,14 @@ class JobAttachmentUploadView(APIView):
 
     @extend_schema(tags=['jobs'], summary="Upload job attachment", request=JobAttachmentSerializer)
     def post(self, request, id):
-        job = get_object_or_404(Job, id=id)
+        user = request.user
+        if user.is_superuser or user.is_staff:
+            job = get_object_or_404(Job, id=id)
+        else:
+            job = get_object_or_404(
+                Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+                id=id
+            )
         files = request.FILES.getlist('files')
         if not files:
             return Response({'error': 'No files provided.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1027,9 +1034,7 @@ class EmployeeStartJobView(APIView):
 
         if job.status == JobStatus.IN_PROGRESS:
             return Response({'message': 'Job is already in progress.'}, status=status.HTTP_200_OK)
-        if job.status == JobStatus.COMPLETED:
-            return Response({'error': 'Job is already completed.'}, status=status.HTTP_400_BAD_REQUEST)
-        if job.status not in [JobStatus.PENDING, JobStatus.OVERDUE, JobStatus.SCHEDULED]:
+        if job.status not in [JobStatus.PENDING, JobStatus.OVERDUE, JobStatus.SCHEDULED, JobStatus.COMPLETED, JobStatus.ON_HOLD]:
             return Response(
                 {'error': f'Cannot start a job with status "{job.status}".'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1049,6 +1054,49 @@ class EmployeeStartJobView(APIView):
         return Response(
             {
                 'message': 'Job started.',
+                'data': EmployeeJobDetailSerializer(job, context={'request': request}).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class EmployeeReopenJobView(APIView):
+    """POST — Employee or Admin reopens a completed job back to IN_PROGRESS."""
+    permission_classes = [IsAdminOrManagerOrEmployee]
+
+    @extend_schema(
+        tags=['jobs-employee'],
+        summary="Reopen job",
+        description="Reopens a completed job and updates its status to IN_PROGRESS.",
+        responses={200: EmployeeJobDetailSerializer}
+    )
+    def post(self, request, id):
+        user = request.user
+        if user.is_superuser or user.is_staff:
+            job = get_object_or_404(Job, id=id)
+        else:
+            job = get_object_or_404(
+                Job.objects.filter(Q(assigned_to=user) | Q(notes__staff=user)).distinct(),
+                id=id
+            )
+
+        if job.status == JobStatus.IN_PROGRESS:
+            return Response(
+                {
+                    'message': 'Job is already in progress.',
+                    'data': EmployeeJobDetailSerializer(job, context={'request': request}).data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        job.status = JobStatus.IN_PROGRESS
+        job.save()
+
+        _log_activity(job, ActivityType.STATUS_CHANGED, request.user, "Job reopened by user")
+
+        return Response(
+            {
+                'message': 'Job reopened successfully.',
                 'data': EmployeeJobDetailSerializer(job, context={'request': request}).data
             },
             status=status.HTTP_200_OK

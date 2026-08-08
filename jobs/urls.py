@@ -53,6 +53,8 @@ urlpatterns = [
     path('employee/jobs-by-date/', EmployeeJobsByDateView.as_view(), name='employee-jobs-by-date'),
     path('employee/<uuid:id>/', EmployeeJobDetailByIdView.as_view(), name='employee-job-detail-by-id'),
     path('employee/<uuid:id>/start/', EmployeeStartJobView.as_view(), name='employee-job-start'),
+    path('employee/<uuid:id>/reopen/', EmployeeReopenJobView.as_view(), name='employee-job-reopen'),
     path('employee/<uuid:id>/complete/', EmployeeCompleteJobView.as_view(), name='employee-job-complete'),
+    path('<uuid:id>/reopen/', EmployeeReopenJobView.as_view(), name='job-reopen'),
     path('employee/<uuid:id>/attachments/<uuid:attachment_id>/download/', EmployeeJobAttachmentDownloadView.as_view(), name='employee-attachment-download'),
 ]

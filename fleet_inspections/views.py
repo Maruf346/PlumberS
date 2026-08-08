@@ -25,7 +25,11 @@ def _check_vehicle_permission(vehicle, user):
     has_active_job = Job.objects.filter(
         assigned_to=user,
         vehicle=vehicle,
-        status__in=[JobStatus.PENDING, JobStatus.IN_PROGRESS, JobStatus.SCHEDULED, JobStatus.TO_INVOICE, JobStatus.OVERDUE, JobStatus.EMERGENCY_MAKE_SAFE, JobStatus.JOB_COMPLETED, JobStatus.ON_HOLD]
+        status__in=[
+            JobStatus.PENDING, JobStatus.IN_PROGRESS, JobStatus.SCHEDULED,
+            JobStatus.TO_INVOICE, JobStatus.OVERDUE, JobStatus.EMERGENCY_MAKE_SAFE,
+            JobStatus.COMPLETED, JobStatus.ON_HOLD
+        ]
     ).exists()
 
     if not has_active_job:

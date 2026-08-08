@@ -491,9 +491,11 @@ class JobStatusUpdateSerializer(serializers.ModelSerializer):
         instance = self.instance
         user = self.context['request'].user
         allowed_transitions = {
-            JobStatus.PENDING: [JobStatus.IN_PROGRESS],
-            JobStatus.IN_PROGRESS: [JobStatus.COMPLETED],
-            JobStatus.OVERDUE: [JobStatus.COMPLETED],
+            JobStatus.PENDING: [JobStatus.IN_PROGRESS, JobStatus.COMPLETED],
+            JobStatus.IN_PROGRESS: [JobStatus.COMPLETED, JobStatus.PENDING, JobStatus.ON_HOLD],
+            JobStatus.OVERDUE: [JobStatus.COMPLETED, JobStatus.IN_PROGRESS],
+            JobStatus.COMPLETED: [JobStatus.IN_PROGRESS, JobStatus.PENDING, JobStatus.SCHEDULED],
+            JobStatus.ON_HOLD: [JobStatus.IN_PROGRESS, JobStatus.PENDING],
         }
         allowed = allowed_transitions.get(instance.status, [])
         if value not in allowed:
