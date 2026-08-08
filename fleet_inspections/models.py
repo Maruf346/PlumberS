@@ -37,7 +37,7 @@ class VehicleInspection(models.Model):
         default=False,
         help_text="True if any check item has is_ok=False."
     )
-    notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True, null=True)
     inspected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -56,6 +56,22 @@ class VehicleInspection(models.Model):
         verbose_name = 'Vehicle Inspection'
         verbose_name_plural = 'Vehicle Inspections'
         ordering = ['-inspected_at']
+
+
+class VehicleInspectionPhoto(models.Model):
+    """General photos attached directly to a vehicle inspection."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inspection = models.ForeignKey(
+        VehicleInspection,
+        on_delete=models.CASCADE,
+        related_name='general_photos'
+    )
+    photo = models.ImageField(upload_to='fleet_inspections/general_photos/')
+    caption = models.CharField(max_length=200, blank=True, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
 
 
 class InspectionCheckItem(models.Model):
@@ -95,7 +111,7 @@ class InspectionCheckPhoto(models.Model):
         related_name='photos'
     )
     photo = models.ImageField(upload_to='fleet_inspections/photos/')
-    caption = models.CharField(max_length=200, blank=True)
+    caption = models.CharField(max_length=200, blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

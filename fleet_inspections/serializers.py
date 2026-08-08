@@ -5,7 +5,14 @@ from .models import *
 class InspectionCheckPhotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = InspectionCheckPhoto
-        fields = ['id', 'photo', 'uploaded_at']
+        fields = ['id', 'photo', 'caption', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at']
+
+
+class VehicleInspectionPhotoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VehicleInspectionPhoto
+        fields = ['id', 'photo', 'caption', 'uploaded_at']
         read_only_fields = ['id', 'uploaded_at']
 
 
@@ -27,7 +34,7 @@ class CheckItemSubmitSerializer(serializers.Serializer):
     """
     category = serializers.ChoiceField(choices=CheckItemCategory.choices)
     is_ok = serializers.BooleanField()
-    issue_detail = serializers.CharField(required=False, allow_blank=True, default='')
+    issue_detail = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
 
     def validate(self, data):
         if not data['is_ok'] and not data.get('issue_detail', '').strip():
@@ -47,7 +54,7 @@ class InspectionSubmitSerializer(serializers.Serializer):
     At least one item must be provided.
     Duplicate categories are rejected.
     """
-    notes = serializers.CharField(required=False, allow_blank=True, default='')
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
     items = CheckItemSubmitSerializer(many=True)
 
     def validate_items(self, value):
@@ -84,11 +91,12 @@ class VehicleInspectionListSerializer(serializers.ModelSerializer):
 
 
 class VehicleInspectionDetailSerializer(serializers.ModelSerializer):
-    """Full detail — all check items with nested photos."""
+    """Full detail — all check items with nested photos and general photos."""
     vehicle_name = serializers.CharField(source='vehicle.name', read_only=True)
     vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
     inspected_by_name = serializers.CharField(source='inspected_by.full_name', read_only=True)
     check_items = InspectionCheckItemSerializer(many=True, read_only=True)
+    general_photos = VehicleInspectionPhotoSerializer(many=True, read_only=True)
     issue_count = serializers.ReadOnlyField()
     completed_items_count = serializers.ReadOnlyField()
 
@@ -97,7 +105,7 @@ class VehicleInspectionDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'vehicle', 'vehicle_name', 'vehicle_plate',
             'inspected_by', 'inspected_by_name',
-            'has_open_issue', 'notes',
+            'has_open_issue', 'notes', 'general_photos',
             'check_items', 'issue_count', 'completed_items_count',
             'inspected_at', 'updated_at'
         ]

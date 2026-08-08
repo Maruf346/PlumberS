@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import VehicleInspection, InspectionCheckItem, InspectionCheckPhoto
+from .models import VehicleInspection, VehicleInspectionPhoto, InspectionCheckItem, InspectionCheckPhoto
+
+
+class VehicleInspectionPhotoInline(admin.TabularInline):
+    model = VehicleInspectionPhoto
+    extra = 0
+    readonly_fields = ['uploaded_at']
 
 
 class InspectionCheckPhotoInline(admin.TabularInline):
@@ -21,7 +27,7 @@ class VehicleInspectionAdmin(admin.ModelAdmin):
     list_filter = ['has_open_issue']
     search_fields = ['vehicle__name', 'vehicle__plate', 'inspected_by__full_name']
     readonly_fields = ['id', 'has_open_issue', 'inspected_at', 'updated_at']
-    inlines = [InspectionCheckItemInline]
+    inlines = [InspectionCheckItemInline, VehicleInspectionPhotoInline]
 
 
 @admin.register(InspectionCheckItem)

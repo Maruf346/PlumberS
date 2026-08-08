@@ -199,9 +199,36 @@ captions_tires_0: "Close up of front tire"
         inspection = VehicleInspection.objects.create(
             vehicle=vehicle,
             inspected_by=request.user,
-            notes=validated.get('notes', ''),
+            notes=validated.get('notes') or '',
             has_open_issue=False  # computed below
         )
+
+        # Handle general inspection photos
+        # Pattern 1: general_photos_0, general_photos_1... with general_captions_<index>
+        # Pattern 2: general_photos / general_photos[] list in request.FILES
+        general_photos_found = False
+        index = 0
+        while True:
+            photo_key = f'general_photos_{index}'
+            photo_file = request.FILES.get(photo_key)
+            if not photo_file:
+                break
+            caption = request.data.get(f'general_captions_{index}') or request.data.get(f'general_notes_{index}') or ''
+            VehicleInspectionPhoto.objects.create(
+                inspection=inspection,
+                photo=photo_file,
+                caption=caption
+            )
+            general_photos_found = True
+            index += 1
+
+        if not general_photos_found:
+            general_list = request.FILES.getlist('general_photos') or request.FILES.getlist('general_photos[]')
+            for gf in general_list:
+                VehicleInspectionPhoto.objects.create(
+                    inspection=inspection,
+                    photo=gf
+                )
 
         has_issue = False
 
@@ -213,6 +240,16 @@ captions_tires_0: "Close up of front tire"
             if not is_ok:
                 has_issue = True
 
+            # Tightened logic check: if item is_ok=True, no photo can be attached
+            if is_ok and request.FILES.get(f'photos_{category}_0'):
+                inspection.delete()
+                return Response(
+                    {
+                        'error': f"Photos cannot be attached to '{category}' when marked as no issue (is_ok=true)."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             check_item = InspectionCheckItem.objects.create(
                 inspection=inspection,
                 category=category,
@@ -220,20 +257,20 @@ captions_tires_0: "Close up of front tire"
                 issue_detail=issue_detail
             )
 
-            # Collect photos for this category
-            # Key convention: photos_<category>_<index>
-            index = 0
-            while True:
-                photo_key = f'photos_{category}_{index}'
-                photo_file = request.FILES.get(photo_key)
-                if not photo_file:
-                    break
-                InspectionCheckPhoto.objects.create(
-                    check_item=check_item,
-                    photo=photo_file,
-                    caption=request.data.get(f'captions_{category}_{index}', '')
-                )
-                index += 1
+            # Collect photos for this category if is_ok=False
+            if not is_ok:
+                index = 0
+                while True:
+                    photo_key = f'photos_{category}_{index}'
+                    photo_file = request.FILES.get(photo_key)
+                    if not photo_file:
+                        break
+                    InspectionCheckPhoto.objects.create(
+                        check_item=check_item,
+                        photo=photo_file,
+                        caption=request.data.get(f'captions_{category}_{index}', '')
+                    )
+                    index += 1
 
         # Save computed has_open_issue
         inspection.has_open_issue = has_issue
