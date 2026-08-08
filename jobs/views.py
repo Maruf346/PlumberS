@@ -863,6 +863,22 @@ class EmployeeMyJobsView(APIView):
         today_entries = [_build_note_job_entry(n, n.job) for n in today_notes]
         upcoming_entries = [_build_note_job_entry(n, n.job) for n in upcoming_notes]
 
+        # Collect job IDs already represented in today/upcoming to avoid duplicates
+        seen_job_ids = set()
+        for entry in today_entries + upcoming_entries:
+            seen_job_ids.add(entry.id)
+
+        # Active jobs (non-completed) that have no today/upcoming note — include in today bucket
+        active_jobs = _job_base_qs().filter(
+            Q(assigned_to=user) | Q(notes__staff=user),
+        ).exclude(
+            status=JobStatus.COMPLETED
+        ).distinct()
+        for job in active_jobs.order_by('-created_at'):
+            if job.id not in seen_job_ids:
+                today_entries.append(_build_job_entry_no_note(job))
+                seen_job_ids.add(job.id)
+
         # Completed: all jobs (with or without notes) accessible to user
         completed_jobs = _job_base_qs().filter(
             Q(assigned_to=user) | Q(notes__staff=user),
