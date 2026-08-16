@@ -329,6 +329,12 @@ class JobWriteSerializer(serializers.ModelSerializer):
     Admin creates or updates a job.
     Scheduling (datetime) is handled through Notes — not here.
     """
+    priority = serializers.ChoiceField(
+        choices=JobPriority.choices,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
     assigned_to_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
     assigned_manager_ids = serializers.ListField(
         child=serializers.UUIDField(), required=False, write_only=True
@@ -398,6 +404,9 @@ class JobWriteSerializer(serializers.ModelSerializer):
             if not SafetyFormTemplate.objects.filter(id=fid, is_active=True).exists():
                 raise serializers.ValidationError(f'Safety form {fid} not found or inactive.')
         return value
+
+    def validate_priority(self, value):
+        return None if value == '' else value
 
     def validate_custom_report_ids(self, value):
         from custom_reports.models import CustomReportTemplate

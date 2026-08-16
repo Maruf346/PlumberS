@@ -83,7 +83,8 @@ class Job(models.Model):
     priority = models.CharField(
         max_length=10,
         choices=JobPriority.choices,
-        default=JobPriority.MEDIUM
+        null=True,
+        blank=True
     )
 
     # Core details
