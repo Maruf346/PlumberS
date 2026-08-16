@@ -1,7 +1,9 @@
 import json
+from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 from channels.db import database_sync_to_async
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 
@@ -26,7 +28,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'count': count,
             }))
         else:
-            await self.close()
+            await self.close(code=4001)
 
     async def disconnect(self, close_code):
         if hasattr(self, 'group_name'):
@@ -80,10 +82,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     def _extract_token(self):
         query = self.scope.get('query_string', b'').decode()
-        for part in query.split('&'):
-            if part.startswith('token='):
-                return part.split('token=')[-1]
-        return ''
+        return parse_qs(query).get('token', [''])[0]
 
     @database_sync_to_async
     def get_user_from_token(self, token):
@@ -94,7 +93,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             jwt_auth = JWTAuthentication()
             validated_token = jwt_auth.get_validated_token(token)
             return jwt_auth.get_user(validated_token)
-        except (InvalidToken, TokenError):
+        except (AuthenticationFailed, InvalidToken, TokenError):
             return AnonymousUser()
 
     @database_sync_to_async

@@ -116,8 +116,18 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:3000'
 ).split(',')
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
 
 CORS_ALLOW_CREDENTIALS = True
+
+WEBSOCKET_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        'WEBSOCKET_ALLOWED_ORIGINS',
+        ','.join(CORS_ALLOWED_ORIGINS)
+    ).split(',')
+    if origin.strip()
+]
 
 # CORS configs
 CSRF_TRUSTED_ORIGINS = [
