@@ -35,7 +35,7 @@ class JobAdmin(admin.ModelAdmin):
     list_filter = ['status', 'priority']
     search_fields = ['job_id', 'job_name', 'client__name', 'assigned_to__email']
     readonly_fields = ['id', 'job_id', 'created_at', 'updated_at']
-    filter_horizontal = ['safety_forms', 'assigned_managers']
+    filter_horizontal = ['safety_forms', 'custom_reports', 'assigned_managers']
     ordering = ['-created_at']
     inlines = [JobAttachmentInline, JobLineItemInline, JobActivityInline]
 
@@ -47,7 +47,7 @@ class JobAdmin(admin.ModelAdmin):
             'fields': ('client', 'assigned_to', 'assigned_managers', 'vehicle'),
         }),
         ('Forms', {
-            'fields': ('safety_forms',),
+            'fields': ('safety_forms', 'custom_reports'),
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

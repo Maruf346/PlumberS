@@ -93,7 +93,7 @@ def _paginate(entries, request, serializer_class):
 def _job_base_qs():
     return Job.objects.select_related(
         'client', 'assigned_to', 'vehicle', 'assigned_to__user_color'
-    ).prefetch_related('safety_forms', 'notes')
+    ).prefetch_related('safety_forms', 'custom_reports', 'notes')
 
 
 # ==================== DASHBOARD ====================
@@ -287,7 +287,9 @@ class AdminJobDetailView(RetrieveAPIView):
     lookup_field = 'id'
 
     def get_queryset(self):
-        return Job.objects.prefetch_related('notes__staff', 'notes__tasks')
+        return Job.objects.prefetch_related(
+            'safety_forms', 'custom_reports', 'notes__staff', 'notes__tasks'
+        )
 
     @extend_schema(tags=['jobs'], summary="Retrieve job detail (admin/manager)")
     def get(self, request, *args, **kwargs):
@@ -499,10 +501,14 @@ class EmployeeJobDetailView(RetrieveAPIView):
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser or user.is_staff:
-            return Job.objects.prefetch_related('notes__staff', 'notes__tasks')
+            return Job.objects.prefetch_related(
+                'safety_forms', 'custom_reports', 'notes__staff', 'notes__tasks'
+            )
         return Job.objects.filter(
             Q(assigned_to=user) | Q(notes__staff=user)
-        ).distinct().prefetch_related('notes__staff', 'notes__tasks')
+        ).distinct().prefetch_related(
+            'safety_forms', 'custom_reports', 'notes__staff', 'notes__tasks'
+        )
 
     @extend_schema(tags=['jobs'], summary="Employee — retrieve job detail")
     def get(self, request, *args, **kwargs):
@@ -1015,7 +1021,7 @@ class EmployeeJobDetailByIdView(RetrieveAPIView):
             queryset.select_related(
                 'client', 'vehicle', 'assigned_to'
             ).prefetch_related(
-                'attachments', 'safety_forms', 'job_reports', 'notes'
+                'attachments', 'safety_forms', 'custom_reports', 'job_reports', 'notes'
             ),
             id=self.kwargs['id']
         )

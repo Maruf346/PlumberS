@@ -141,6 +141,13 @@ class Job(models.Model):
         help_text="Safety form templates required for this job"
     )
 
+    custom_reports = models.ManyToManyField(
+        'custom_reports.CustomReportTemplate',
+        blank=True,
+        related_name='jobs',
+        help_text="Custom report templates required for this job"
+    )
+
     # Report types — managed via reports.JobReport (FK to this model)
     # report_template_ids = models.JSONField(   # REMOVED — replaced by reports.JobReport
     #     default=list,

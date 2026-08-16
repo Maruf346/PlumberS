@@ -253,6 +253,7 @@ class JobDetailSerializer(serializers.ModelSerializer):
     line_items = JobLineItemSerializer(many=True, read_only=True)
     activities = JobActivitySerializer(many=True, read_only=True)
     safety_forms = serializers.SerializerMethodField()
+    custom_reports = serializers.SerializerMethodField()
     reports = serializers.SerializerMethodField()
     grand_total = serializers.SerializerMethodField()
     is_overdue = serializers.ReadOnlyField()
@@ -268,7 +269,7 @@ class JobDetailSerializer(serializers.ModelSerializer):
             'job_details', 'scheduled_datetime', 'end_time',
             'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client', 'assigned_to', 'assigned_managers',
-            'vehicle', 'safety_forms', 'reports',
+            'vehicle', 'safety_forms', 'custom_reports', 'reports',
             'attachments', 'line_items', 'activities',
             'grand_total', 'is_overdue', 'has_fleet_issue',
             'schedules',
@@ -309,6 +310,10 @@ class JobDetailSerializer(serializers.ModelSerializer):
         from safety_forms.serializers import SafetyFormTemplateListSerializer
         return SafetyFormTemplateListSerializer(obj.safety_forms.all(), many=True).data
 
+    def get_custom_reports(self, obj):
+        from custom_reports.serializers import CustomReportTemplateListSerializer
+        return CustomReportTemplateListSerializer(obj.custom_reports.all(), many=True).data
+
     def get_reports(self, obj):
         job_reports = obj.job_reports.all().order_by('created_at')
         return JobReportSummarySerializer(job_reports, many=True).data
@@ -333,6 +338,9 @@ class JobWriteSerializer(serializers.ModelSerializer):
     safety_form_ids = serializers.ListField(
         child=serializers.UUIDField(), required=False, write_only=True
     )
+    custom_report_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, write_only=True
+    )
     report_type_ids = serializers.ListField(
         child=serializers.CharField(), required=False, write_only=True,
         help_text="List of report type strings e.g. ['roof', 'appliance']"
@@ -344,7 +352,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
             'job_name', 'job_details', 'priority',
             'insured_name', 'insured_phone', 'insured_email', 'insured_address', 'site_access_info',
             'client_id', 'assigned_to_id', 'assigned_manager_ids',
-            'vehicle_id', 'safety_form_ids', 'report_type_ids',
+            'vehicle_id', 'safety_form_ids', 'custom_report_ids', 'report_type_ids',
         ]
 
     def validate_assigned_to_id(self, value):
@@ -391,6 +399,13 @@ class JobWriteSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f'Safety form {fid} not found or inactive.')
         return value
 
+    def validate_custom_report_ids(self, value):
+        from custom_reports.models import CustomReportTemplate
+        for fid in value:
+            if not CustomReportTemplate.objects.filter(id=fid, is_active=True).exists():
+                raise serializers.ValidationError(f'Custom report {fid} not found or inactive.')
+        return value
+
     def validate_report_type_ids(self, value):
         from reports.models import ReportType
         valid = [choice[0] for choice in ReportType.choices]
@@ -407,6 +422,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
         from fleets.models import Vehicle
         from clients.models import Client
         from safety_forms.models import SafetyFormTemplate
+        from custom_reports.models import CustomReportTemplate
         from reports.models import JobReport
 
         assigned_to_id = validated_data.pop('assigned_to_id', 'UNCHANGED')
@@ -414,6 +430,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
         vehicle_id = validated_data.pop('vehicle_id', 'UNCHANGED')
         client_id = validated_data.pop('client_id', 'UNCHANGED')
         safety_form_ids = validated_data.pop('safety_form_ids', 'UNCHANGED')
+        custom_report_ids = validated_data.pop('custom_report_ids', 'UNCHANGED')
         report_type_ids = validated_data.pop('report_type_ids', 'UNCHANGED')
 
         if assigned_to_id != 'UNCHANGED':
@@ -434,6 +451,10 @@ class JobWriteSerializer(serializers.ModelSerializer):
         if safety_form_ids != 'UNCHANGED':
             forms = SafetyFormTemplate.objects.filter(id__in=safety_form_ids)
             job.safety_forms.set(forms)
+
+        if custom_report_ids != 'UNCHANGED':
+            custom_reports = CustomReportTemplate.objects.filter(id__in=custom_report_ids)
+            job.custom_reports.set(custom_reports)
 
         if report_type_ids != 'UNCHANGED':
             if is_create:
@@ -456,7 +477,7 @@ class JobWriteSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         relation_keys = [
             'assigned_to_id', 'assigned_manager_ids',
-            'vehicle_id', 'client_id', 'safety_form_ids', 'report_type_ids',
+            'vehicle_id', 'client_id', 'safety_form_ids', 'custom_report_ids', 'report_type_ids',
         ]
         clean_data = {k: v for k, v in validated_data.items() if k not in relation_keys}
         job = Job.objects.create(**clean_data)
@@ -588,6 +609,8 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
     vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
     attachments = JobAttachmentSerializer(many=True, read_only=True)
     safety_form_ids = serializers.SerializerMethodField()
+    custom_report_ids = serializers.SerializerMethodField()
+    custom_reports = serializers.SerializerMethodField()
     reports = serializers.SerializerMethodField()
     scheduled_datetime = serializers.SerializerMethodField()
     end_time = serializers.SerializerMethodField()
@@ -603,7 +626,7 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
             'attachments', 'reports',
             'insured_name', 'insured_phone', 'insured_email',
             'insured_address', 'site_access_info',
-            'safety_form_ids', 'my_schedules',
+            'safety_form_ids', 'custom_report_ids', 'custom_reports', 'my_schedules',
             'created_at', 'updated_at',
         ]
 
@@ -657,6 +680,13 @@ class EmployeeJobDetailSerializer(serializers.ModelSerializer):
 
     def get_safety_form_ids(self, obj):
         return [str(uid) for uid in obj.safety_forms.values_list('id', flat=True)]
+
+    def get_custom_report_ids(self, obj):
+        return [str(uid) for uid in obj.custom_reports.values_list('id', flat=True)]
+
+    def get_custom_reports(self, obj):
+        from custom_reports.serializers import CustomReportTemplateListSerializer
+        return CustomReportTemplateListSerializer(obj.custom_reports.all(), many=True).data
 
     def get_reports(self, obj):
         job_reports = obj.job_reports.all().order_by('created_at')

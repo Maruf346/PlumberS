@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'notifications',
     'clients',
     'safety_forms',
+    'custom_reports',
     'fleets',
     'fleet_inspections',
     'jobs',
